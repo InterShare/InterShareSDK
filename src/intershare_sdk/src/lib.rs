@@ -3,60 +3,64 @@ use std::panic;
 use std::path::PathBuf;
 
 // Only Android
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 use android_logger::Config;
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 use log::LevelFilter;
 #[cfg(target_os = "android")]
 use std::sync::RwLock;
 
 // If not Android
-#[cfg(not(target_os="android"))]
-use simplelog::{Config, WriteLogger};
-#[cfg(not(target_os="android"))]
-use log::{info, LevelFilter};
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 use directories::BaseDirs;
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
+use log::{info, LevelFilter};
+#[cfg(not(target_os = "android"))]
+use simplelog::{Config, WriteLogger};
+#[cfg(not(target_os = "android"))]
 use std::fs;
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 use std::fs::File;
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 use std::sync::Once;
 
+pub use crate::connection_request::{
+    ConnectionRequest, ReceiveProgressDelegate, ReceiveProgressState,
+};
+pub use crate::errors::ConnectErrors;
+pub use crate::nearby_server::ConnectionIntentType;
+pub use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
+pub use crate::protocol::communication::FileTransferIntent;
+pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
+pub use crate::share_store::{
+    ConnectionMedium, SendProgressDelegate, SendProgressState, ShareStore,
+};
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
 pub use thiserror::Error;
-pub use crate::nearby_server::ConnectionIntentType;
-pub use crate::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
-pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
-pub use crate::protocol::communication::FileTransferIntent;
-pub use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
-pub use crate::errors::ConnectErrors;
-pub use crate::share_store::{ShareStore, ConnectionMedium, SendProgressDelegate, SendProgressState};
 
-
+pub mod communication;
+pub mod connection;
+pub mod connection_request;
 pub mod discovery;
 pub mod encryption;
-pub mod stream;
-pub mod nearby_server;
-pub mod transmission;
-pub mod communication;
-pub mod connection_request;
 pub mod errors;
-pub mod share_store;
-pub mod connection;
-mod tar;
-mod windows;
+pub mod nearby_server;
 mod progress;
+pub mod share_store;
+pub mod stream;
+mod tar;
+pub mod transmission;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_DISCOVERY_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
 pub const BLE_BUFFER_SIZE: usize = 10240;
 
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 static INIT_LOGGER: Once = Once::new();
 
 #[uniffi::export]
@@ -73,7 +77,7 @@ pub fn get_ble_discovery_characteristic_uuid() -> String {
 pub enum VersionCompatibility {
     Compatible,
     OutdatedVersion,
-    IncompatibleNewVersion
+    IncompatibleNewVersion,
 }
 
 #[uniffi::export]
@@ -102,25 +106,20 @@ fn get_log_file_path() -> Option<PathBuf> {
     let project_dirs = BaseDirs::new()?;
     let config_dir = project_dirs.config_dir();
 
-    return Some(config_dir
-        .join("InterShare")
-        .join("intershare.log")
-    )
+    return Some(config_dir.join("InterShare").join("intershare.log"));
 }
 
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 fn get_log_file_path() -> Option<PathBuf> {
     return None;
 }
 
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 pub fn init_logger() {
-    android_logger::init_once(
-        Config::default().with_max_level(LevelFilter::Trace),
-    );
+    android_logger::init_once(Config::default().with_max_level(LevelFilter::Trace));
 }
 
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 fn set_panic_logger() {
     panic::set_hook(Box::new(|panic_info| {
         let location = panic_info.location().unwrap();
@@ -141,7 +140,7 @@ fn set_panic_logger() {
     }));
 }
 
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 pub fn init_logger() {
     INIT_LOGGER.call_once(|| {
         // Get the platform-specific configuration folder
@@ -169,11 +168,7 @@ pub fn init_logger() {
 pub fn get_log_file_path_str() -> Option<String> {
     init_logger();
 
-    if let Ok(path) = get_log_file_path()?.into_os_string().into_string() {
-        return Some(path);
-    }
-
-    return None;
+    get_log_file_path()?.into_os_string().into_string().ok()
 }
 
 #[cfg(target_os = "android")]
@@ -185,6 +180,5 @@ pub fn set_tmp_dir(tmp: String) {
     let mut tmp_dir = TMP_DIR.write().unwrap();
     *tmp_dir = Some(tmp);
 }
-
 
 uniffi::include_scaffolding!("intershare_sdk");

@@ -5,5 +5,8 @@ pub mod discovery {
 }
 
 pub mod communication {
-    include!(concat!(env!("OUT_DIR"), "/inter_share_sdk.communication.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/inter_share_sdk.communication.rs"
+    ));
 }

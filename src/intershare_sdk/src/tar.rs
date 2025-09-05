@@ -169,8 +169,10 @@ pub fn untar_stream<T: FnMut(f64)>(
         let entry_type = entry.header().entry_type();
 
         let target_path = if sub_path.as_os_str().is_empty()
-            && matches!(entry_type, EntryType::Regular | EntryType::GNUSparse | EntryType::Continuous)
-        {
+            && matches!(
+                entry_type,
+                EntryType::Regular | EntryType::GNUSparse | EntryType::Continuous
+            ) {
             let mut file_path = dest_dir.join(&root_component);
             if file_path.exists() {
                 file_path = get_unique_path(&file_path);
@@ -180,14 +182,16 @@ pub fn untar_stream<T: FnMut(f64)>(
             }
             file_path
         } else {
-            let root_target = top_level_map.entry(root_component.clone()).or_insert_with(|| {
-                let candidate = dest_dir.join(&root_component);
-                if candidate.exists() {
-                    get_unique_path(&candidate)
-                } else {
-                    candidate
-                }
-            });
+            let root_target = top_level_map
+                .entry(root_component.clone())
+                .or_insert_with(|| {
+                    let candidate = dest_dir.join(&root_component);
+                    if candidate.exists() {
+                        get_unique_path(&candidate)
+                    } else {
+                        candidate
+                    }
+                });
 
             let full_path = if sub_path.as_os_str().is_empty() {
                 root_target.clone()

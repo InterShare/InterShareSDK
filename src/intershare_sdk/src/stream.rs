@@ -27,7 +27,7 @@ impl Read for dyn NativeStreamDelegate {
 
 impl Write for dyn NativeStreamDelegate {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        return Ok(NativeStreamDelegate::write(self, buf.to_vec()) as usize)
+        return Ok(NativeStreamDelegate::write(self, buf.to_vec()) as usize);
     }
 
     fn flush(&mut self) -> io::Result<()> {

@@ -2,15 +2,15 @@ use std::io::{Cursor, Read, Write};
 
 pub struct MemoryStream {
     last_written_byte_length: usize,
-    cursor: Cursor<Vec<u8>>
+    cursor: Cursor<Vec<u8>>,
 }
 
 impl MemoryStream {
     pub fn new() -> Self {
         return Self {
             last_written_byte_length: 0,
-            cursor: Cursor::new(Vec::new())
-        }
+            cursor: Cursor::new(Vec::new()),
+        };
     }
 
     pub fn position(&self) -> u64 {
@@ -34,7 +34,7 @@ impl Write for MemoryStream {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        return self.cursor.flush()
+        return self.cursor.flush();
     }
 }
 
@@ -45,46 +45,53 @@ impl Read for MemoryStream {
     }
 }
 
-
 #[test]
 pub fn memory_stream() {
     let mut memory_stream = MemoryStream::new();
 
-    memory_stream.write(&[4u8, 5u8, 6u8])
+    memory_stream
+        .write(&[4u8, 5u8, 6u8])
         .expect("Failed to write memory_stream");
 
     memory_stream.set_position(0);
 
     let mut result = Vec::new();
-    memory_stream.read_to_end(&mut result)
+    memory_stream
+        .read_to_end(&mut result)
         .expect("Failed to read memory_stream");
 
     assert_eq!(result.as_slice(), &[4u8, 5u8, 6u8]);
 
     // ====
 
-    memory_stream.write(&[2u8, 7u8, 9u8])
+    memory_stream
+        .write(&[2u8, 7u8, 9u8])
         .expect("Failed to write memory_stream");
-    memory_stream.set_position(memory_stream.position() - memory_stream.last_written_byte_length as u64);
+    memory_stream
+        .set_position(memory_stream.position() - memory_stream.last_written_byte_length as u64);
 
     result = Vec::new();
-    memory_stream.read_to_end(&mut result)
+    memory_stream
+        .read_to_end(&mut result)
         .expect("Failed to read memory_stream");
 
     assert_eq!(result.as_slice(), &[2u8, 7u8, 9u8]);
 
     // ====
 
-    memory_stream.write(&[2u8, 7u8, 9u8])
+    memory_stream
+        .write(&[2u8, 7u8, 9u8])
         .expect("Failed to write memory_stream");
 
-    memory_stream.write(&[1u8, 2u8, 0u8])
+    memory_stream
+        .write(&[1u8, 2u8, 0u8])
         .expect("Failed to write memory_stream");
 
     memory_stream.set_position(memory_stream.position() - 6);
 
     result = Vec::new();
-    memory_stream.read_to_end(&mut result)
+    memory_stream
+        .read_to_end(&mut result)
         .expect("Failed to read memory_stream");
 
     assert_eq!(result.as_slice(), &[2u8, 7u8, 9u8, 1u8, 2u8, 0u8]);

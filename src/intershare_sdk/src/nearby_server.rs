@@ -1,28 +1,31 @@
-use crate::stream::NativeStreamDelegate;
-use std::fmt::Debug;
-use std::io::{Read, Write};
-use std::sync::Arc;
-use local_ip_address::local_ip;
-use log::{error, info};
-use prost_stream::Stream;
-use protocol::communication::request::RequestTypes;
-use protocol::communication::Request;
-use protocol::discovery::{BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, DeviceDiscoveryMessage, TcpConnectionInfo};
-use tokio::runtime::Handle;
-use tokio::sync::RwLock;
-use url::Url;
-use protocol::discovery::device_discovery_message::Content;
 use crate::communication::initiate_receiver_communication;
 use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
 use crate::errors::RequestConvenienceShareErrors;
 use crate::share_store::ShareStore;
-use crate::{init_logger, PROTOCOL_VERSION};
 use crate::stream::Close;
+use crate::stream::NativeStreamDelegate;
 use crate::transmission::tcp::TcpServer;
+use crate::{init_logger, PROTOCOL_VERSION};
+use local_ip_address::local_ip;
+use log::{error, info};
+use prost_stream::Stream;
+use protocol::communication::request::RequestTypes;
+use protocol::communication::Request;
+use protocol::discovery::device_discovery_message::Content;
+use protocol::discovery::{
+    BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, DeviceDiscoveryMessage,
+    TcpConnectionInfo,
+};
 use protocol::prost::Message;
+use std::fmt::Debug;
+use std::io::{Read, Write};
+use std::sync::Arc;
+use tokio::runtime::Handle;
+use tokio::sync::RwLock;
+use url::Url;
 
-#[cfg(target_os="windows")]
+#[cfg(target_os = "windows")]
 use windows::Devices::Bluetooth::GenericAttributeProfile::*;
 
 #[uniffi::export(callback_interface)]
@@ -39,7 +42,7 @@ pub trait L2CapDelegate: Send + Sync + Debug {
 #[derive(PartialEq)]
 pub enum ConnectionIntentType {
     FileTransfer,
-    Clipboard
+    Clipboard,
 }
 
 #[uniffi::export(callback_interface)]
@@ -55,7 +58,7 @@ pub trait NearbyInstantReceiveDelegate: Send + Sync + Debug {
 pub struct CurrentShareStore {
     pub request_id: String,
     pub file_paths: Option<Vec<String>>,
-    pub clipboard: Option<String>
+    pub clipboard: Option<String>,
 }
 
 #[derive(uniffi::Object)]
@@ -69,16 +72,20 @@ pub struct InternalNearbyServer {
     nearby_connection_delegate: Option<Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>>,
     pub(crate) current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>,
 
-    #[cfg(target_os="windows")]
+    #[cfg(target_os = "windows")]
     pub(crate) gatt_service_provider: std::sync::RwLock<Option<GattServiceProvider>>,
 
-    requested_download_id: Arc<RwLock<Option<String>>>
+    requested_download_id: Arc<RwLock<Option<String>>>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
 impl InternalNearbyServer {
     #[uniffi::constructor]
-    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
+    pub fn new(
+        my_device: Device,
+        file_storage: String,
+        delegate: Option<Box<dyn NearbyConnectionDelegate>>,
+    ) -> Self {
         init_logger();
 
         let mut my_device = my_device.clone();
@@ -87,12 +94,12 @@ impl InternalNearbyServer {
         let device_connection_info = DeviceConnectionInfo {
             device: Some(my_device),
             ble: None,
-            tcp: None
+            tcp: None,
         };
 
         let nearby_connection_delegate = match delegate {
             Some(d) => Some(Arc::new(RwLock::new(d))),
-            None => None
+            None => None,
         };
 
         return Self {
@@ -105,10 +112,10 @@ impl InternalNearbyServer {
             nearby_connection_delegate,
             current_share_store: Arc::new(RwLock::new(None)),
 
-            #[cfg(target_os="windows")]
+            #[cfg(target_os = "windows")]
             gatt_service_provider: std::sync::RwLock::new(None),
 
-            requested_download_id: Arc::new(RwLock::new(None))
+            requested_download_id: Arc::new(RwLock::new(None)),
         };
     }
 
@@ -116,19 +123,21 @@ impl InternalNearbyServer {
         *self.ble_l2_cap_client.blocking_write() = Some(delegate);
     }
 
-    pub fn add_bluetooth_implementation(&self, implementation: Box<dyn BleServerImplementationDelegate>) {
+    pub fn add_bluetooth_implementation(
+        &self,
+        implementation: Box<dyn BleServerImplementationDelegate>,
+    ) {
         *self.ble_server_implementation.blocking_write() = Some(implementation)
     }
 
     pub async fn get_advertisement_data(&self) -> Vec<u8> {
         if *self.advertise.read().await {
             return DeviceDiscoveryMessage {
-                content: Some(
-                    Content::DeviceConnectionInfo(
-                        self.device_connection_info.read().await.clone()
-                    )
-                ),
-            }.encode_length_delimited_to_vec();
+                content: Some(Content::DeviceConnectionInfo(
+                    self.device_connection_info.read().await.clone(),
+                )),
+            }
+            .encode_length_delimited_to_vec();
 
             // self.mut_variables.write().await.discovery_message = message;
         } else {
@@ -165,8 +174,7 @@ impl InternalNearbyServer {
         let ip = local_ip();
         if let Ok(my_local_ip) = ip {
             return Some(my_local_ip.to_string());
-        }
-        else if let Err(error) = ip {
+        } else if let Err(error) = ip {
             info!("Unable to obtain IP address: {:?}", error);
         }
 
@@ -174,9 +182,12 @@ impl InternalNearbyServer {
     }
 
     /// https://share.intershare.app?id=hgf8o47fdsb394mv385&ip=192.168.12.13&port=5200&device_id=9A403351-A926-4D1C-855F-432A6ED51E0E&protocol_version=1
-    pub async fn request_download(&self, link: String) -> Result<(), RequestConvenienceShareErrors> {
-        let parsed_url = Url::parse(&link)
-            .map_err(|_| RequestConvenienceShareErrors::NotAValidLink)?;
+    pub async fn request_download(
+        &self,
+        link: String,
+    ) -> Result<(), RequestConvenienceShareErrors> {
+        let parsed_url =
+            Url::parse(&link).map_err(|_| RequestConvenienceShareErrors::NotAValidLink)?;
 
         if parsed_url.host_str() != Some("s.intershare.app") {
             error!("Invalid host: {:?}", parsed_url.host_str());
@@ -188,16 +199,16 @@ impl InternalNearbyServer {
             .find(|(key, _)| key == "i")
             .map(|(_, value)| value)
             .filter(|val| !val.is_empty())
-            .ok_or(RequestConvenienceShareErrors::NotAValidLink)
-            ?.to_string();
+            .ok_or(RequestConvenienceShareErrors::NotAValidLink)?
+            .to_string();
 
         let ip = parsed_url
             .query_pairs()
             .find(|(key, _)| key == "ip")
             .map(|(_, value)| value)
             .filter(|val| !val.is_empty())
-            .ok_or(RequestConvenienceShareErrors::NotAValidLink)
-            ?.to_string();
+            .ok_or(RequestConvenienceShareErrors::NotAValidLink)?
+            .to_string();
 
         let port = parsed_url
             .query_pairs()
@@ -224,15 +235,11 @@ impl InternalNearbyServer {
         //     .ok_or(RequestConvenienceShareErrors::NotAValidLink)
         //     ?.to_string();
 
-
         let connection = Connection::new(self.ble_l2_cap_client.clone());
 
         let connection_details = DeviceConnectionInfo {
             device: None,
-            tcp: Some(TcpConnectionInfo {
-                hostname: ip,
-                port
-            }),
+            tcp: Some(TcpConnectionInfo { hostname: ip, port }),
             ble: None,
         };
 
@@ -240,7 +247,9 @@ impl InternalNearbyServer {
             Ok(connection) => connection,
             Err(err) => {
                 error!("Error while trying to connect: {:?}", err);
-                return Err(RequestConvenienceShareErrors::FailedToConnect { error: err.to_string() });
+                return Err(RequestConvenienceShareErrors::FailedToConnect {
+                    error: err.to_string(),
+                });
             }
         };
 
@@ -248,7 +257,7 @@ impl InternalNearbyServer {
             r#type: RequestTypes::ConvenienceDownloadRequest as i32,
             device: self.device_connection_info.read().await.device.clone(),
             share_id: Some(id.clone()),
-            intent: None
+            intent: None,
         };
 
         *self.requested_download_id.write().await = Some(id);
@@ -294,14 +303,16 @@ impl InternalNearbyServer {
 
         *self.advertise.write().await = true;
 
-        #[cfg(target_os="windows")]
+        #[cfg(target_os = "windows")]
         {
             self.start_windows_server().await;
         }
 
-        #[cfg(not(target_os="windows"))]
+        #[cfg(not(target_os = "windows"))]
         {
-            if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.read().await {
+            if let Some(ble_advertisement_implementation) =
+                &*self.ble_server_implementation.read().await
+            {
                 ble_advertisement_implementation.start_server();
             };
         }
@@ -313,13 +324,12 @@ impl InternalNearbyServer {
     }
 
     pub async fn share_text(&self, text: String, allow_convenience_share: bool) -> Arc<ShareStore> {
-
         let share_store = Arc::new(ShareStore::new(
             None,
             Some(text),
             allow_convenience_share,
             self.ble_l2_cap_client.clone(),
-            self.device_connection_info.read().await.clone()
+            self.device_connection_info.read().await.clone(),
         ));
 
         *self.current_share_store.write().await = Some(share_store.clone());
@@ -331,18 +341,22 @@ impl InternalNearbyServer {
         self.handle_incoming_connection_generic(native_stream_handle);
     }
 
-    pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool) -> Arc<ShareStore> {
+    pub async fn share_files(
+        &self,
+        file_paths: Vec<String>,
+        allow_convenience_share: bool,
+    ) -> Arc<ShareStore> {
         let share_store = Arc::new(ShareStore::new(
             Some(file_paths),
             None,
             allow_convenience_share,
             self.ble_l2_cap_client.clone(),
-            self.device_connection_info.read().await.clone()
+            self.device_connection_info.read().await.clone(),
         ));
 
         *self.current_share_store.write().await = Some(share_store.clone());
 
-        return share_store
+        return share_store;
     }
 
     // pub(crate) async fn received_convenience_download_request(request: Request, current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>) {
@@ -368,23 +382,28 @@ impl InternalNearbyServer {
 
         *self.tcp_server.write().await = None;
 
-        #[cfg(target_os="windows")]
+        #[cfg(target_os = "windows")]
         self.stop_windows_server();
 
-        #[cfg(not(target_os="windows"))]
-        if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.blocking_read() {
+        #[cfg(not(target_os = "windows"))]
+        if let Some(ble_advertisement_implementation) =
+            &*self.ble_server_implementation.blocking_read()
+        {
             ble_advertisement_implementation.stop_server();
         }
     }
 
     pub fn get_device_name(&self) -> Option<String> {
         let device = self.device_connection_info.blocking_read().device.clone();
-        return Some(device?.name)
+        return Some(device?.name);
     }
 }
 
 impl InternalNearbyServer {
-    fn handle_incoming_connection_generic<T>(&self, native_stream_handle: T) where T: Read + Write + Send + Close + 'static {
+    fn handle_incoming_connection_generic<T>(&self, native_stream_handle: T)
+    where
+        T: Read + Write + Send + Close + 'static,
+    {
         let delegate = self.nearby_connection_delegate.clone();
 
         let Some(delegate) = delegate else {
@@ -398,16 +417,17 @@ impl InternalNearbyServer {
             // Create a new runtime if one doesn't exist
             let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
             rt.spawn(async move {
-                Self::process_incoming_connection(native_stream_handle, delegate, file_storage).await;
+                Self::process_incoming_connection(native_stream_handle, delegate, file_storage)
+                    .await;
             });
         } else {
             // Already in a Tokio runtime
             tokio::spawn(async move {
-                Self::process_incoming_connection(native_stream_handle, delegate, file_storage).await;
+                Self::process_incoming_connection(native_stream_handle, delegate, file_storage)
+                    .await;
             });
         }
     }
-
 
     async fn process_incoming_connection<T>(
         native_stream_handle: T,
@@ -436,14 +456,14 @@ impl InternalNearbyServer {
         };
 
         if request.r#type == RequestTypes::ShareRequest as i32 {
-            let connection_request = ConnectionRequest::new(
-                request,
-                Box::new(encrypted_stream),
-                file_storage.clone()
-            );
+            let connection_request =
+                ConnectionRequest::new(request, Box::new(encrypted_stream), file_storage.clone());
 
             info!("Sending received_connection_request delegate.");
-            delegate.read().await.received_connection_request(Arc::new(connection_request));
+            delegate
+                .read()
+                .await
+                .received_connection_request(Arc::new(connection_request));
         } else {
             // NearbyServer::received_convenience_download_request(request, current_share_store).await;
         }

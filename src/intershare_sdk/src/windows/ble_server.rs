@@ -1,15 +1,15 @@
+use crate::nearby_server::InternalNearbyServer;
+use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
+use log::{error, info, warn};
+use protocol::discovery::device_discovery_message::Content;
+use protocol::discovery::DeviceDiscoveryMessage;
+use protocol::prost::Message;
 use windows::{
     core::{Result as WinResult, GUID},
     Devices::Bluetooth::GenericAttributeProfile::*,
     Foundation::TypedEventHandler,
     Storage::Streams::*,
 };
-use protocol::discovery::device_discovery_message::Content;
-use protocol::discovery::DeviceDiscoveryMessage;
-use protocol::prost::Message;
-use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
-use crate::nearby_server::InternalNearbyServer;
-use log::{error, info, warn};
 
 // Constants for optimized advertising
 const MAX_ADVERTISING_RETRIES: u32 = 3;
@@ -19,15 +19,15 @@ impl InternalNearbyServer {
     pub(crate) async fn setup_gatt_server(&self) -> WinResult<GattServiceProvider> {
         let service_uuid = GUID::from(BLE_SERVICE_UUID);
 
-        let service_provider_result: GattServiceProviderResult = GattServiceProvider::CreateAsync(service_uuid)?.get()?;
+        let service_provider_result: GattServiceProviderResult =
+            GattServiceProvider::CreateAsync(service_uuid)?.get()?;
         let gatt_service_provider = service_provider_result.ServiceProvider()?;
 
         let characteristic_uuid = GUID::from(BLE_DISCOVERY_CHARACTERISTIC_UUID);
 
         let characteristic_parameters = GattLocalCharacteristicParameters::new()?;
-        characteristic_parameters.SetCharacteristicProperties(
-            GattCharacteristicProperties::Read
-        )?;
+        characteristic_parameters
+            .SetCharacteristicProperties(GattCharacteristicProperties::Read)?;
 
         characteristic_parameters.SetReadProtectionLevel(GattProtectionLevel::Plain)?;
 
@@ -35,12 +35,11 @@ impl InternalNearbyServer {
         // Encode the current DeviceDiscoveryMessage and set it as the static value
         let device_connection_info = self.device_connection_info.read().await.clone();
         let initial_value = DeviceDiscoveryMessage {
-            content: Some(
-                Content::DeviceConnectionInfo(
-                    device_connection_info.clone()
-                )
-            ),
-        }.encode_length_delimited_to_vec();
+            content: Some(Content::DeviceConnectionInfo(
+                device_connection_info.clone(),
+            )),
+        }
+        .encode_length_delimited_to_vec();
         let writer = DataWriter::new()?;
         writer.WriteBytes(&initial_value)?;
         let static_buffer = writer.DetachBuffer()?;
@@ -54,18 +53,18 @@ impl InternalNearbyServer {
         let gatt_characteristic = characteristic_result.Characteristic()?;
 
         let read_requested_handler = TypedEventHandler::new(
-            move |_sender: &Option<GattLocalCharacteristic>, args: &Option<GattReadRequestedEventArgs>| {
+            move |_sender: &Option<GattLocalCharacteristic>,
+                  args: &Option<GattReadRequestedEventArgs>| {
                 if let Some(args) = args {
                     let deferral = args.GetDeferral()?;
                     let request: GattReadRequest = args.GetRequestAsync()?.get()?;
 
                     let value = DeviceDiscoveryMessage {
-                        content: Some(
-                            Content::DeviceConnectionInfo(
-                                device_connection_info.clone()
-                            )
-                        ),
-                    }.encode_length_delimited_to_vec();
+                        content: Some(Content::DeviceConnectionInfo(
+                            device_connection_info.clone(),
+                        )),
+                    }
+                    .encode_length_delimited_to_vec();
 
                     let writer = DataWriter::new()?;
                     writer.WriteBytes(&value)?;
@@ -82,19 +81,33 @@ impl InternalNearbyServer {
         return Ok(gatt_service_provider);
     }
 
-
     pub(crate) async fn start_windows_server(&self) {
         let gatt = match self.setup_gatt_server().await {
-            Ok(p) => { info!("Successfully created GATT service provider"); p }
-            Err(e) => { error!("Failed to start GATT server: {:?}", e); return; }
+            Ok(p) => {
+                info!("Successfully created GATT service provider");
+                p
+            }
+            Err(e) => {
+                error!("Failed to start GATT server: {:?}", e);
+                return;
+            }
         };
 
         let adv_parameters = match GattServiceProviderAdvertisingParameters::new() {
             Ok(params) => params,
-            Err(e) => { error!("Failed to create advertising parameters: {:?}", e); return; }
+            Err(e) => {
+                error!("Failed to create advertising parameters: {:?}", e);
+                return;
+            }
         };
-        if let Err(e) = adv_parameters.SetIsConnectable(true) { error!("...{:?}", e); return; }
-        if let Err(e) = adv_parameters.SetIsDiscoverable(true) { error!("...{:?}", e); return; }
+        if let Err(e) = adv_parameters.SetIsConnectable(true) {
+            error!("...{:?}", e);
+            return;
+        }
+        if let Err(e) = adv_parameters.SetIsDiscoverable(true) {
+            error!("...{:?}", e);
+            return;
+        }
 
         let mut retry_count = 0;
         while retry_count < MAX_ADVERTISING_RETRIES {
@@ -102,7 +115,8 @@ impl InternalNearbyServer {
                 Ok(_) => {
                     info!("Successfully started optimized BLE advertising");
                     {
-                        let mut w = self.gatt_service_provider
+                        let mut w = self
+                            .gatt_service_provider
                             .write()
                             .expect("Failed to lock GattServiceProvider");
                         *w = Some(gatt.clone());
@@ -119,12 +133,15 @@ impl InternalNearbyServer {
                 }
             }
         }
-        error!("Failed to start BLE advertising after {} attempts", MAX_ADVERTISING_RETRIES);
+        error!(
+            "Failed to start BLE advertising after {} attempts",
+            MAX_ADVERTISING_RETRIES
+        );
     }
 
-
     pub(crate) fn stop_windows_server(&self) {
-        let gatt_service_provider = self.gatt_service_provider
+        let gatt_service_provider = self
+            .gatt_service_provider
             .read()
             .expect("Failed to lock GattServiceProvider");
 

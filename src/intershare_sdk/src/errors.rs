@@ -6,7 +6,7 @@ use thiserror::Error;
 pub enum ConnectErrors {
     #[error("Invalid protocol version. Receiver device has a unsupported version.")]
     InvalidProtocolVersion,
-    
+
     #[error("Peripheral is unreachable")]
     Unreachable,
 
@@ -59,7 +59,7 @@ pub enum RequestConvenienceShareErrors {
     IncompatibleProtocolVersion,
 
     #[error("Failed to connect")]
-    FailedToConnect { error: String }
+    FailedToConnect { error: String },
 }
 
 #[derive(Error, Debug)]
@@ -107,5 +107,5 @@ pub enum DiscoverySetupError {
     UnableToSetupUdp,
 
     #[error("Unable to setup MDNS-SD Discovery")]
-    UnableToSetupMdns
+    UnableToSetupMdns,
 }
