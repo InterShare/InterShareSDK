@@ -1,5 +1,4 @@
 use std::ffi::OsStr;
-use std::panic;
 use std::path::PathBuf;
 
 // Only Android
@@ -11,6 +10,9 @@ use log::LevelFilter;
 use std::sync::RwLock;
 
 // If not Android
+
+#[cfg(not(target_os = "android"))]
+use std::panic;
 #[cfg(not(target_os = "android"))]
 use directories::BaseDirs;
 #[cfg(not(target_os = "android"))]

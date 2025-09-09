@@ -85,6 +85,7 @@ cargo {
     targets = ["arm", "x86_64", "arm64"]  // See bellow for a longer list of options
     apiLevel = 26
     profile = "release"
+    pythonCommand = "python3"
 }
 
 tasks.matching { it.name.matches(/merge.*JniLibFolders/) }.configureEach {

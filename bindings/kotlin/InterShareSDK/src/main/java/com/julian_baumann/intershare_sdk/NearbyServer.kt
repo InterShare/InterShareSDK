@@ -92,7 +92,7 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
 
     init {
         setTmpDir(context.cacheDir.absolutePath)
-        
+
         internal.addBluetoothImplementation(internalBleImplementation)
         internal.addL2CapClient(internalL2CapClient)
 
@@ -109,8 +109,8 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
         internal.changeDevice(newDevice)
     }
 
-    suspend fun shareFiles(urls: List<String>, allowConvenienceDownload: Boolean, progressDelegate: ShareProgressDelegate?): ShareStore {
-        return internal.shareFiles(urls, allowConvenienceDownload, progressDelegate)
+    suspend fun shareFiles(urls: List<String>, allowConvenienceDownload: Boolean): ShareStore {
+        return internal.shareFiles(urls, allowConvenienceDownload)
     }
 
     suspend fun shareText(text: String, allowConvenienceDownload: Boolean): ShareStore {
