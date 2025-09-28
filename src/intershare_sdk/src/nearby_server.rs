@@ -12,7 +12,7 @@ use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 use url::Url;
 use protocol::discovery::device_discovery_message::Content;
-use crate::communication::initiate_receiver_communication;
+use crate::encryption::initiate_receiver_communication;
 use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
 use crate::errors::RequestConvenienceShareErrors;

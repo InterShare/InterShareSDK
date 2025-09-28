@@ -10,7 +10,7 @@ use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use crate::communication::initiate_receiver_communication;
+use crate::encryption::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
 use crate::nearby_server::{NearbyConnectionDelegate, InternalNearbyServer};
 use crate::stream::Close;

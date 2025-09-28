@@ -6,6 +6,18 @@ pub trait Close {
     fn close(&self);
 }
 
+impl<T> Close for rustls::StreamOwned<rustls::ClientConnection, T> where T: Read + Write + Send + Close {
+    fn close(&self) {
+        self.sock.close();
+    }
+}
+
+impl<T> Close for rustls::StreamOwned<rustls::ServerConnection, T> where T: Read + Write + Send + Close {
+    fn close(&self) {
+        self.sock.close();
+    }
+}
+
 #[uniffi::export(callback_interface)]
 pub trait NativeStreamDelegate: Send + Sync + Debug {
     fn read(&self, buffer_length: u64) -> Vec<u8>;

@@ -33,6 +33,8 @@ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fast_qr = { version = "0.12.7", default-features = false, features = ["image"]}
 uniffi = { version = "0.28", features = ["cli", "tokio", "default"] }
 regex = "1"
+rustls = { version = "0.23.31", features = ["log", "logging", "prefer-post-quantum", "ring", "std"], default-features = false }
+ring = { version = "0.17.14", features = ["std"] }
 tar = "0.4"
 
 

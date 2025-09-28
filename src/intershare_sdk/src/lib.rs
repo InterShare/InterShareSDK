@@ -42,7 +42,6 @@ pub mod encryption;
 pub mod stream;
 pub mod nearby_server;
 pub mod transmission;
-pub mod communication;
 pub mod connection_request;
 pub mod errors;
 pub mod share_store;
