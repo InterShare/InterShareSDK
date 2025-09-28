@@ -52,6 +52,7 @@ impl rustls::client::danger::ServerCertVerifier for DangerousAcceptAllCertificat
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
+    return nonce.into();
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
         vec![rustls::SignatureScheme::ED25519]
     }

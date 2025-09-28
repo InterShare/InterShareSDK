@@ -65,7 +65,7 @@ impl ConnectionRequest {
     ) -> Option<Vec<String>> {
         match untar_stream(
             &mut *stream,
-            (&self.file_storage).as_ref(),
+            self.file_storage.as_ref(),
             file_transfer.file_size,
             |progress| {
                 self.update_progress(ReceiveProgressState::Receiving { progress: progress });

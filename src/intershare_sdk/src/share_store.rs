@@ -15,12 +15,7 @@ use protocol::{
     },
     discovery::{Device, DeviceConnectionInfo},
 };
-use std::{
-    fmt::Debug,
-    fs::File,
-    path::Path,
-    sync::Arc,
-};
+use std::{fmt::Debug, fs::File, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 pub enum ConnectionMedium {
@@ -105,13 +100,10 @@ impl ShareStore {
 
         let connection = Connection::new(self.ble_l2_cap_client.clone());
 
-        let mut encrypted_stream = match connection.connect(receiver, &progress_delegate).await {
-            Ok(connection) => connection,
-            Err(error) => {
-                update_progress(&progress_delegate, SendProgressState::Unknown);
-                return Err(error);
-            }
-        };
+        let mut encrypted_stream = connection
+            .connect(receiver, &progress_delegate)
+            .await
+            .inspect_err(|_| update_progress(&progress_delegate, SendProgressState::Unknown))?;
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
@@ -152,28 +144,22 @@ impl ShareStore {
 
         let connection = Connection::new(self.ble_l2_cap_client.clone());
 
-        let mut encrypted_stream = match connection.connect(receiver, &progress_delegate).await {
-            Ok(connection) => connection,
-            Err(error) => {
-                update_progress(&progress_delegate, SendProgressState::Unknown);
-                return Err(error);
-            }
-        };
+        let mut encrypted_stream = connection
+            .connect(receiver, &progress_delegate)
+            .await
+            .inspect_err(|_| update_progress(&progress_delegate, SendProgressState::Unknown))?;
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
         update_progress(&progress_delegate, SendProgressState::Requesting);
 
-        let file_name = {
-            if file_paths.len() == 1 {
-                let path = Path::new(file_paths.first().unwrap());
-                Some(convert_os_str(
-                    path.file_name().expect("Failed to get file name"),
-                ))
-            } else {
-                None
-            }
-        };
+        let file_name = file_paths.first().map(|file_path| {
+            convert_os_str(
+                Path::new(file_path)
+                    .file_name()
+                    .expect("Failed to get file name"),
+            )
+        });
 
         let mut file_size: u64 = 0;
 
@@ -201,14 +187,11 @@ impl ShareStore {
 
         let _ = proto_stream.send(&transfer_request);
 
-        let response = match proto_stream.recv::<TransferRequestResponse>() {
-            Ok(message) => message,
-            Err(error) => {
-                return Err(ConnectErrors::FailedToGetTransferRequestResponse {
-                    error: error.to_string(),
-                })
-            }
-        };
+        let response = proto_stream
+            .recv::<TransferRequestResponse>()
+            .map_err(|error| ConnectErrors::FailedToGetTransferRequestResponse {
+                error: error.to_string(),
+            })?;
 
         if !response.accepted {
             update_progress(&progress_delegate, SendProgressState::Declined);
@@ -220,7 +203,12 @@ impl ShareStore {
             SendProgressState::Transferring { progress: 0.0 },
         );
 
-        let tar_result = stream_tar(&mut encrypted_stream, file_paths, file_size, &progress_delegate);
+        let tar_result = stream_tar(
+            &mut encrypted_stream,
+            file_paths,
+            file_size,
+            &progress_delegate,
+        );
 
         if let Err(error) = tar_result {
             error!("Error while tarring: {}", error);
@@ -273,15 +261,12 @@ impl ShareStore {
             .fit_width(300)
             .to_bytes(&qrcode);
 
-        match img {
-            Ok(bytes) => return Some(bytes),
-            Err(error_message) => {
-                error!(
-                    "Error while trying to generate QR code: {:?}",
-                    error_message
-                );
-                return None;
-            }
-        }
+        img.inspect_err(|error_message| {
+            error!(
+                "Error while trying to generate QR code: {:?}",
+                error_message
+            )
+        })
+        .ok()
     }
 }
