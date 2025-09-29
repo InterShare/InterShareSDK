@@ -148,7 +148,7 @@ fn encrypt(data: &[u8]) -> Result<Vec<u8>, String> {
         let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
         let result = slice.to_vec();
         if !output.pbData.is_null() {
-            LocalFree(HLOCAL(output.pbData as isize));
+            LocalFree(HLOCAL(output.pbData.cast()));
         }
         Ok(result)
     }
@@ -167,6 +167,7 @@ fn decrypt(data: &[u8]) -> Result<Vec<u8>, String> {
             None,
             None,
             None,
+            None,
             CRYPTPROTECT_UI_FORBIDDEN,
             &mut output,
         )
@@ -175,7 +176,7 @@ fn decrypt(data: &[u8]) -> Result<Vec<u8>, String> {
         let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
         let result = slice.to_vec();
         if !output.pbData.is_null() {
-            LocalFree(HLOCAL(output.pbData as isize));
+            LocalFree(HLOCAL(output.pbData.cast()));
         }
         Ok(result)
     }
