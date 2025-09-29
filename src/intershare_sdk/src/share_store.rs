@@ -27,6 +27,7 @@ pub enum SendProgressState {
     Unknown,
     Connecting,
     Requesting,
+    VerificationCode { code: String },
     ConnectionMediumUpdate { medium: ConnectionMedium },
     Transferring { progress: f64 },
     Cancelled,
@@ -105,6 +106,17 @@ impl ShareStore {
             .await
             .inspect_err(|_| update_progress(&progress_delegate, SendProgressState::Unknown))?;
 
+        let vertification_code = encrypted_stream.verification_code().to_string();
+
+        info!("Verification code: {}", vertification_code);
+
+        update_progress(
+            &progress_delegate,
+            SendProgressState::VerificationCode {
+                code: vertification_code,
+            },
+        );
+
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
         update_progress(
@@ -148,6 +160,17 @@ impl ShareStore {
             .connect(receiver, &progress_delegate)
             .await
             .inspect_err(|_| update_progress(&progress_delegate, SendProgressState::Unknown))?;
+
+        let vertification_code = encrypted_stream.verification_code().to_string();
+
+        info!("Verification code: {}", vertification_code);
+
+        update_progress(
+            &progress_delegate,
+            SendProgressState::VerificationCode {
+                code: vertification_code,
+            },
+        );
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 

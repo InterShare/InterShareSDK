@@ -7,6 +7,7 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::StreamOwned;
 use std::error::Error;
 use std::fmt::Debug;
+use std::io;
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -140,7 +141,7 @@ pub fn initiate_sender_communication<T>(
     device_id: &str,
     server_name_hint: Option<&str>,
     stream: T,
-) -> Result<StreamOwned<rustls::ClientConnection, T>, Box<dyn Error>>
+) -> Result<TlsStream<T, rustls::ClientConnection>, Box<dyn Error>>
 where
     T: Read + Write,
 {
@@ -163,12 +164,12 @@ where
     let server_name = resolve_server_name(server_name_hint)?;
 
     let connection = ClientConnection::new(config.into(), server_name)?;
-    Ok(StreamOwned::new(connection, stream))
+    finalize_client_stream(StreamOwned::new(connection, stream))
 }
 
 pub fn initiate_receiver_communication<T>(
     stream: T,
-) -> Result<StreamOwned<rustls::ServerConnection, T>, Box<dyn Error>>
+) -> Result<TlsStream<T, rustls::ServerConnection>, Box<dyn Error>>
 where
     T: Read + Write,
 {
@@ -195,15 +196,167 @@ where
         .with_single_cert(vec![certificate], private_key)?;
 
     let connection = ServerConnection::new(config.into())?;
-    Ok(StreamOwned::new(connection, stream))
+    finalize_server_stream(StreamOwned::new(connection, stream))
 }
 
-pub trait EncryptedReadWrite: Read + Write + Send + Close {}
-impl<T> EncryptedReadWrite for StreamOwned<rustls::ClientConnection, T> where
-    T: Read + Write + Send + Close
+fn finalize_client_stream<T>(
+    mut stream: StreamOwned<rustls::ClientConnection, T>,
+) -> Result<TlsStream<T, rustls::ClientConnection>, Box<dyn Error>>
+where
+    T: Read + Write,
 {
+    while stream.conn.is_handshaking() {
+        stream
+            .conn
+            .complete_io(&mut stream.sock)
+            .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    }
+    let code = derive_verification_code_client(&mut stream.conn)
+        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    Ok(TlsStream::new(stream, code))
 }
-impl<T> EncryptedReadWrite for StreamOwned<rustls::ServerConnection, T> where
-    T: Read + Write + Send + Close
+
+fn finalize_server_stream<T>(
+    mut stream: StreamOwned<rustls::ServerConnection, T>,
+) -> Result<TlsStream<T, rustls::ServerConnection>, Box<dyn Error>>
+where
+    T: Read + Write,
 {
+    while stream.conn.is_handshaking() {
+        stream
+            .conn
+            .complete_io(&mut stream.sock)
+            .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    }
+    let code = derive_verification_code_server(&mut stream.conn)
+        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    Ok(TlsStream::new(stream, code))
+}
+
+fn derive_verification_code_client(
+    conn: &mut rustls::ClientConnection,
+) -> Result<String, rustls::Error> {
+    const LABEL: &[u8] = b"intershare-tls-verification";
+    let mut bytes = [0u8; 4];
+    conn.export_keying_material(&mut bytes, LABEL, None)?;
+    let number = u32::from_be_bytes(bytes) % 100_000;
+    Ok(format!("{:05}", number))
+}
+
+fn derive_verification_code_server(
+    conn: &mut rustls::ServerConnection,
+) -> Result<String, rustls::Error> {
+    const LABEL: &[u8] = b"intershare-tls-verification";
+    let mut bytes = [0u8; 4];
+    conn.export_keying_material(&mut bytes, LABEL, None)?;
+    let number = u32::from_be_bytes(bytes) % 100_000;
+    Ok(format!("{:05}", number))
+}
+
+pub struct TlsStream<T, C>
+where
+    T: Read + Write,
+{
+    inner: StreamOwned<C, T>,
+    verification_code: String,
+}
+
+impl<T, C> TlsStream<T, C>
+where
+    T: Read + Write,
+{
+    fn new(inner: StreamOwned<C, T>, verification_code: String) -> Self {
+        Self {
+            inner,
+            verification_code,
+        }
+    }
+
+    pub fn verification_code(&self) -> &str {
+        &self.verification_code
+    }
+}
+
+impl<T> Read for TlsStream<T, rustls::ClientConnection>
+where
+    T: Read + Write,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl<T> Read for TlsStream<T, rustls::ServerConnection>
+where
+    T: Read + Write,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl<T> Write for TlsStream<T, rustls::ClientConnection>
+where
+    T: Read + Write,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<T> Write for TlsStream<T, rustls::ServerConnection>
+where
+    T: Read + Write,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<T> Close for TlsStream<T, rustls::ClientConnection>
+where
+    T: Read + Write + Close,
+{
+    fn close(&self) {
+        self.inner.sock.close();
+    }
+}
+
+impl<T> Close for TlsStream<T, rustls::ServerConnection>
+where
+    T: Read + Write + Close,
+{
+    fn close(&self) {
+        self.inner.sock.close();
+    }
+}
+
+pub trait EncryptedReadWrite: Read + Write + Send + Close {
+    fn verification_code(&self) -> &str;
+}
+
+impl<T> EncryptedReadWrite for TlsStream<T, rustls::ClientConnection>
+where
+    T: Read + Write + Send + Close,
+{
+    fn verification_code(&self) -> &str {
+        self.verification_code()
+    }
+}
+
+impl<T> EncryptedReadWrite for TlsStream<T, rustls::ServerConnection>
+where
+    T: Read + Write + Send + Close,
+{
+    fn verification_code(&self) -> &str {
+        self.verification_code()
+    }
 }

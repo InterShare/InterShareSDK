@@ -33,7 +33,7 @@ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fast_qr = { version = "0.13.1", default-features = false, features = ["image"]}
 uniffi = { version = "0.28", features = ["cli", "tokio", "default"] }
 regex = "1"
-rustls = { version = "0.23.32", features = ["log", "logging", "prefer-post-quantum", "ring", "std"], default-features = false }
+rustls = { version = "0.23.32", features = ["log", "logging", "ring", "std"], default-features = false }
 rustls-pki-types = "1.12.0"
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 ring = { version = "0.17.14", features = ["std"] }

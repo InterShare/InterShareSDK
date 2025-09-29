@@ -75,6 +75,7 @@ interface SendProgressState {
     Unknown();
     Connecting();
     Requesting();
+    VerificationCode(string code);
     ConnectionMediumUpdate(ConnectionMedium medium);
     Transferring(double progress);
     Cancelled();

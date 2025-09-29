@@ -578,6 +578,8 @@ public protocol ConnectionRequestProtocol : AnyObject {
     
     func getSender()  -> Device
     
+    func getVerificationCode()  -> String
+    
     func isLink()  -> Bool
     
     func setProgressDelegate(delegate: ReceiveProgressDelegate) 
@@ -679,6 +681,13 @@ open func getIntentType() -> ConnectionIntentType {
 open func getSender() -> Device {
     return try!  FfiConverterTypeDevice.lift(try! rustCall() {
     uniffi_intershare_sdk_fn_method_connectionrequest_get_sender(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getVerificationCode() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_intershare_sdk_fn_method_connectionrequest_get_verification_code(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -2344,6 +2353,8 @@ public enum SendProgressState {
     case unknown
     case connecting
     case requesting
+    case verificationCode(code: String
+    )
     case connectionMediumUpdate(medium: ConnectionMedium
     )
     case transferring(progress: Double
@@ -2370,17 +2381,20 @@ public struct FfiConverterTypeSendProgressState: FfiConverterRustBuffer {
         
         case 3: return .requesting
         
-        case 4: return .connectionMediumUpdate(medium: try FfiConverterTypeConnectionMedium.read(from: &buf)
+        case 4: return .verificationCode(code: try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .transferring(progress: try FfiConverterDouble.read(from: &buf)
+        case 5: return .connectionMediumUpdate(medium: try FfiConverterTypeConnectionMedium.read(from: &buf)
         )
         
-        case 6: return .cancelled
+        case 6: return .transferring(progress: try FfiConverterDouble.read(from: &buf)
+        )
         
-        case 7: return .finished
+        case 7: return .cancelled
         
-        case 8: return .declined
+        case 8: return .finished
+        
+        case 9: return .declined
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2402,26 +2416,31 @@ public struct FfiConverterTypeSendProgressState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .connectionMediumUpdate(medium):
+        case let .verificationCode(code):
             writeInt(&buf, Int32(4))
+            FfiConverterString.write(code, into: &buf)
+            
+        
+        case let .connectionMediumUpdate(medium):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeConnectionMedium.write(medium, into: &buf)
             
         
         case let .transferring(progress):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterDouble.write(progress, into: &buf)
             
         
         case .cancelled:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .finished:
             writeInt(&buf, Int32(7))
         
         
-        case .declined:
+        case .finished:
             writeInt(&buf, Int32(8))
+        
+        
+        case .declined:
+            writeInt(&buf, Int32(9))
         
         }
     }
@@ -4324,6 +4343,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_connectionrequest_get_sender() != 48559) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_intershare_sdk_checksum_method_connectionrequest_get_verification_code() != 9253) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_connectionrequest_is_link() != 12597) {

@@ -1,7 +1,7 @@
 use crate::discovery::get_connection_details;
 use crate::{
     encryption::initiate_sender_communication,
-    encryption::EncryptedReadWrite,
+    encryption::{EncryptedReadWrite, TlsStream},
     errors::ConnectErrors,
     nearby_server::L2CapDelegate,
     share_store::{ConnectionMedium, SendProgressDelegate, SendProgressState},
@@ -67,7 +67,7 @@ impl Connection {
         remote_device_id: &str,
         server_name_hint: Option<&str>,
         raw_stream: T,
-    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, T>, ConnectErrors>
+    ) -> Result<TlsStream<T, rustls::ClientConnection>, ConnectErrors>
     where
         T: Read + Write,
     {
