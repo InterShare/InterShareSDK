@@ -65,6 +65,7 @@ public class NearbyServer {
     public var state: BluetoothState { get { bleServer.state } }
 
     public init(myDevice: Device, storage: String, delegate: NearbyServerDelegate) {
+        CertificateStore.ensureRegistered()
         internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate)
         bleServer = BLEPeripheralManager(handler: internalHandler, delegate: delegate)
 

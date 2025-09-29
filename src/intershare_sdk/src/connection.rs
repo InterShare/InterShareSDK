@@ -1,7 +1,7 @@
 use crate::discovery::get_connection_details;
 use crate::{
-    communication::initiate_sender_communication,
-    encryption::{EncryptedReadWrite, EncryptedStream},
+    encryption::initiate_sender_communication,
+    encryption::EncryptedReadWrite,
     errors::ConnectErrors,
     nearby_server::L2CapDelegate,
     share_store::{ConnectionMedium, SendProgressDelegate, SendProgressState},
@@ -21,8 +21,6 @@ use tokio::sync::{
     RwLock,
 };
 use uuid::Uuid;
-use crate::{encryption::initiate_sender_communication, encryption::EncryptedReadWrite, errors::ConnectErrors, nearby_server::L2CapDelegate, share_store::{ConnectionMedium, SendProgressDelegate, SendProgressState}, stream::NativeStreamDelegate, transmission::tcp::TcpClient};
-use crate::discovery::get_connection_details;
 
 static L2CAP_CONNECTIONS: OnceLock<RwLock<HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>>> =
     OnceLock::new();
@@ -64,19 +62,30 @@ impl Connection {
         return Self { ble_l2_cap_client };
     }
 
-    async fn initiate_sender<T>(&self, raw_stream: T) -> Result<rustls::StreamOwned<rustls::ClientConnection, T>, ConnectErrors> where T: Read + Write {
-        return Ok(match initiate_sender_communication(raw_stream).await {
-            Ok(stream) => stream,
-            Err(error) => {
-                return Err(ConnectErrors::FailedToEncryptStream {
-                    error: error.to_string(),
-                })
-            }
-        });
+    async fn initiate_sender<T>(
+        &self,
+        remote_device_id: &str,
+        server_name_hint: Option<&str>,
+        raw_stream: T,
+    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, T>, ConnectErrors>
+    where
+        T: Read + Write,
+    {
+        return Ok(
+            match initiate_sender_communication(remote_device_id, server_name_hint, raw_stream) {
+                Ok(stream) => stream,
+                Err(error) => {
+                    return Err(ConnectErrors::FailedToEncryptStream {
+                        error: error.to_string(),
+                    })
+                }
+            },
+        );
     }
 
     pub async fn connect_tcp(
         &self,
+        device: &Device,
         connection_details: &DeviceConnectionInfo,
     ) -> Result<Box<dyn EncryptedReadWrite>, ConnectErrors> {
         let Some(tcp_connection_details) = &connection_details.tcp else {
@@ -105,7 +114,10 @@ impl Connection {
             }
         })?;
 
-        let encrypted_stream = self.initiate_sender(raw_stream).await?;
+        let hostname = Some(tcp_connection_details.hostname.as_str());
+        let encrypted_stream = self
+            .initiate_sender(device.id.as_str(), hostname, raw_stream)
+            .await?;
         return Ok(Box::new(encrypted_stream));
     }
 
@@ -116,10 +128,12 @@ impl Connection {
     ) -> Result<Box<dyn EncryptedReadWrite>, ConnectErrors> {
         L2CAP_CONNECTIONS.get_or_init(|| RwLock::new(HashMap::new()));
 
-        let connection_details =
-            get_connection_details(device).ok_or(ConnectErrors::FailedToGetConnectionDetails)?;
+        let connection_details = get_connection_details(device.clone())
+            .ok_or(ConnectErrors::FailedToGetConnectionDetails)?;
 
-        let encrypted_stream = self.connect_tcp(&connection_details).await;
+        let device_info = connection_details.device.as_ref().unwrap_or(&device);
+
+        let encrypted_stream = self.connect_tcp(device_info, &connection_details).await;
 
         if let Ok(encrypted_stream) = encrypted_stream {
             update_progress(
@@ -172,7 +186,9 @@ impl Connection {
 
         info!("Opened a L2CAP connection");
 
-        let encrypted_stream = self.initiate_sender(connection).await?;
+        let encrypted_stream = self
+            .initiate_sender(device_info.id.as_str(), None, connection)
+            .await?;
 
         update_progress(
             progress_delegate,

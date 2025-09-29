@@ -1,5 +1,5 @@
-use crate::communication::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
+use crate::encryption::initiate_receiver_communication;
 use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
 use crate::stream::Close;
 use log::info;
@@ -14,10 +14,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use crate::encryption::initiate_receiver_communication;
-use crate::connection_request::ConnectionRequest;
-use crate::nearby_server::{NearbyConnectionDelegate, InternalNearbyServer};
-use crate::stream::Close;
 
 pub struct TcpServer {
     pub port: u16,
@@ -29,6 +25,9 @@ pub struct TcpServer {
 }
 
 impl InternalNearbyServer {
+    pub(crate) async fn new_tcp_server(
+        &self,
+        delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>,
         file_storage: String,
     ) -> Result<TcpServer, io::Error> {
         let addresses = [

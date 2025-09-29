@@ -12,8 +12,6 @@ use std::sync::RwLock;
 // If not Android
 
 #[cfg(not(target_os = "android"))]
-use std::panic;
-#[cfg(not(target_os = "android"))]
 use directories::BaseDirs;
 #[cfg(not(target_os = "android"))]
 use log::{info, LevelFilter};
@@ -24,8 +22,11 @@ use std::fs;
 #[cfg(not(target_os = "android"))]
 use std::fs::File;
 #[cfg(not(target_os = "android"))]
+use std::panic;
+#[cfg(not(target_os = "android"))]
 use std::sync::Once;
 
+pub use crate::certificates::{CertificateStoreDelegate, TlsIdentity};
 pub use crate::connection_request::{
     ConnectionRequest, ReceiveProgressDelegate, ReceiveProgressState,
 };
@@ -42,7 +43,7 @@ pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
 pub use thiserror::Error;
 
-pub mod communication;
+pub mod certificates;
 pub mod connection;
 pub mod connection_request;
 pub mod discovery;
@@ -181,6 +182,16 @@ static TMP_DIR: RwLock<Option<String>> = RwLock::new(None);
 pub fn set_tmp_dir(tmp: String) {
     let mut tmp_dir = TMP_DIR.write().unwrap();
     *tmp_dir = Some(tmp);
+}
+
+#[uniffi::export]
+pub fn set_certificate_store_delegate(delegate: Box<dyn CertificateStoreDelegate>) {
+    certificates::set_delegate(delegate);
+}
+
+#[uniffi::export]
+pub fn clear_certificate_store_delegate() {
+    certificates::clear_delegate();
 }
 
 uniffi::include_scaffolding!("intershare_sdk");

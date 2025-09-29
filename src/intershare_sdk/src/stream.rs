@@ -6,13 +6,19 @@ pub trait Close {
     fn close(&self);
 }
 
-impl<T> Close for rustls::StreamOwned<rustls::ClientConnection, T> where T: Read + Write + Send + Close {
+impl<T> Close for rustls::StreamOwned<rustls::ClientConnection, T>
+where
+    T: Read + Write + Send + Close,
+{
     fn close(&self) {
         self.sock.close();
     }
 }
 
-impl<T> Close for rustls::StreamOwned<rustls::ServerConnection, T> where T: Read + Write + Send + Close {
+impl<T> Close for rustls::StreamOwned<rustls::ServerConnection, T>
+where
+    T: Read + Write + Send + Close,
+{
     fn close(&self) {
         self.sock.close();
     }

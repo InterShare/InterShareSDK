@@ -1,6 +1,7 @@
-use crate::communication::initiate_receiver_communication;
+use crate::certificates;
 use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
+use crate::encryption::initiate_receiver_communication;
 use crate::errors::RequestConvenienceShareErrors;
 use crate::share_store::ShareStore;
 use crate::stream::Close;
@@ -12,6 +13,7 @@ use log::{error, info};
 use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
+use protocol::discovery::device::DeviceType;
 use protocol::discovery::device_discovery_message::Content;
 use protocol::discovery::{
     BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, DeviceDiscoveryMessage,
@@ -167,6 +169,9 @@ impl InternalNearbyServer {
     }
 
     pub fn set_tcp_details(&self, tcp_info: TcpConnectionInfo) {
+        let host = tcp_info.hostname.clone();
+        let hosts = vec![host];
+        certificates::update_hosts(&hosts);
         self.device_connection_info.blocking_write().tcp = Some(tcp_info)
     }
 
@@ -243,7 +248,21 @@ impl InternalNearbyServer {
             ble: None,
         };
 
-        let mut encrypted_stream = match connection.connect_tcp(&connection_details).await {
+        let remote_device = Device {
+            id: connection_details
+                .tcp
+                .as_ref()
+                .map(|info| info.hostname.clone())
+                .unwrap_or_else(|| "unknown".to_string()),
+            name: String::from("ConvenienceDownload"),
+            device_type: DeviceType::Unknown as i32,
+            protocol_version: None,
+        };
+
+        let mut encrypted_stream = match connection
+            .connect_tcp(&remote_device, &connection_details)
+            .await
+        {
             Ok(connection) => connection,
             Err(err) => {
                 error!("Error while trying to connect: {:?}", err);
@@ -287,6 +306,8 @@ impl InternalNearbyServer {
                     info!("Port: {}", tcp_server.port);
 
                     let port = tcp_server.port.clone();
+                    let hosts = vec![my_local_ip.clone()];
+                    certificates::update_hosts(&hosts);
                     *self.tcp_server.write().await = Some(tcp_server);
 
                     self.start_loop().await;
