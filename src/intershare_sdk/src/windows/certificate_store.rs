@@ -8,9 +8,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{LocalFree, PWSTR};
+use windows::Win32::Foundation::{LocalFree, HLOCAL};
 use windows::Win32::Security::Cryptography::{
-    CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, DATA_BLOB,
+    CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
 };
 
 static STORE_INIT: Once = Once::new();
@@ -128,28 +128,27 @@ impl CertificateStoreDelegate for WindowsCertificateStore {
 
 fn encrypt(data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
-        let mut input = DATA_BLOB {
+        let mut input = CRYPT_INTEGER_BLOB {
             cbData: data.len() as u32,
             pbData: data.as_ptr() as *mut u8,
         };
-        let mut output = DATA_BLOB::default();
+        let mut output = CRYPT_INTEGER_BLOB::default();
 
         CryptProtectData(
             &input,
             PCWSTR::null(),
-            std::ptr::null(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            None,
+            None,
+            None,
             CRYPTPROTECT_UI_FORBIDDEN,
             &mut output,
         )
-        .ok()
         .map_err(|err| format!("CryptProtectData failed: {}", err.code().0))?;
 
         let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
         let result = slice.to_vec();
         if !output.pbData.is_null() {
-            LocalFree(output.pbData as isize);
+            LocalFree(HLOCAL(output.pbData as isize));
         }
         Ok(result)
     }
@@ -157,33 +156,26 @@ fn encrypt(data: &[u8]) -> Result<Vec<u8>, String> {
 
 fn decrypt(data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
-        let mut input = DATA_BLOB {
+        let mut input = CRYPT_INTEGER_BLOB {
             cbData: data.len() as u32,
             pbData: data.as_ptr() as *mut u8,
         };
-        let mut output = DATA_BLOB::default();
-        let mut description: PWSTR = PWSTR::null();
+        let mut output = CRYPT_INTEGER_BLOB::default();
 
         CryptUnprotectData(
             &mut input,
-            &mut description,
-            std::ptr::null(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            None,
+            None,
+            None,
             CRYPTPROTECT_UI_FORBIDDEN,
             &mut output,
         )
-        .ok()
         .map_err(|err| format!("CryptUnprotectData failed: {}", err.code().0))?;
-
-        if !description.is_null() {
-            LocalFree(description.0 as isize);
-        }
 
         let slice = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
         let result = slice.to_vec();
         if !output.pbData.is_null() {
-            LocalFree(output.pbData as isize);
+            LocalFree(HLOCAL(output.pbData as isize));
         }
         Ok(result)
     }
