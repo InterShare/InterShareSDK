@@ -128,7 +128,7 @@ impl CertificateStoreDelegate for WindowsCertificateStore {
 
 fn encrypt(data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
-        let mut input = CRYPT_INTEGER_BLOB {
+        let input = CRYPT_INTEGER_BLOB {
             cbData: data.len() as u32,
             pbData: data.as_ptr() as *mut u8,
         };
