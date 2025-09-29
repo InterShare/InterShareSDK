@@ -28,6 +28,8 @@ use tokio::sync::RwLock;
 use url::Url;
 
 #[cfg(target_os = "windows")]
+use crate::windows::certificate_store::ensure_certificate_store_registered;
+#[cfg(target_os = "windows")]
 use windows::Devices::Bluetooth::GenericAttributeProfile::*;
 
 #[uniffi::export(callback_interface)]
@@ -89,6 +91,8 @@ impl InternalNearbyServer {
         delegate: Option<Box<dyn NearbyConnectionDelegate>>,
     ) -> Self {
         init_logger();
+        #[cfg(target_os = "windows")]
+        ensure_certificate_store_registered();
 
         let mut my_device = my_device.clone();
         my_device.protocol_version = Some(PROTOCOL_VERSION);
