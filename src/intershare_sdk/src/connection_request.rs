@@ -39,6 +39,7 @@ pub struct ConnectionRequest {
     file_storage: String,
     should_cancel: AtomicBool,
     variables: Arc<RwLock<SharedVariables>>,
+    verification_code: String,
 }
 
 impl ConnectionRequest {
@@ -47,6 +48,7 @@ impl ConnectionRequest {
         connection: Box<dyn EncryptedReadWrite>,
         file_storage: String,
     ) -> Self {
+        let verification_code = connection.verification_code().to_string();
         Self {
             transfer_request,
             connection: Arc::new(Mutex::new(connection)),
@@ -55,6 +57,7 @@ impl ConnectionRequest {
             variables: Arc::new(RwLock::new(SharedVariables {
                 receive_progress_delegate: None,
             })),
+            verification_code,
         }
     }
 
@@ -106,6 +109,10 @@ impl ConnectionRequest {
             .device
             .clone()
             .expect("Device information missing")
+    }
+
+    pub fn get_verification_code(&self) -> String {
+        self.verification_code.clone()
     }
 
     pub fn get_intent_type(&self) -> ConnectionIntentType {

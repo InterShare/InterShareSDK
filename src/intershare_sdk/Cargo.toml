@@ -33,11 +33,15 @@ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fast_qr = { version = "0.13.1", default-features = false, features = ["image"]}
 uniffi = { version = "0.28", features = ["cli", "tokio", "default"] }
 regex = "1"
+rustls = { version = "0.23.32", features = ["log", "logging", "ring", "std"], default-features = false }
+rustls-pki-types = "1.12.0"
+rcgen = { version = "0.14", default-features = false, features = ["ring"] }
+ring = { version = "0.17.14", features = ["std"] }
 tar = "0.4"
 
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_Advertisement", "Devices_Bluetooth_GenericAttributeProfile", "Foundation", "Storage_Streams", "Devices_Radios", "Win32_Networking_WinSock", "Win32_System_WinRT", "implement", "Foundation_Collections", "Win32_System_Com"] }
+windows = { version = "0.58.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_Advertisement", "Devices_Bluetooth_GenericAttributeProfile", "Foundation", "Storage_Streams", "Devices_Radios", "Win32_Networking_WinSock", "Win32_System_WinRT", "implement", "Foundation_Collections", "Win32_System_Com", "Win32_Security_Cryptography", "Win32_Foundation", "Win32_System_Memory"] }
 winapi = { version = "0.3.9", features = ["winsock2"] }
 widestring = "1.1.0"
 futures = "0.3.31"

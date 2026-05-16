@@ -6,6 +6,10 @@ import com.julian_baumann.intershare_sdk.bluetoothLowEnergy.BLECentralManager
 interface DiscoveryDelegate: DeviceListUpdateDelegate
 
 class Discovery(context: Context, delegate: DiscoveryDelegate) {
+    init {
+        CertificateStoreManager.ensureRegistered(context)
+    }
+
     private val internal: InternalDiscovery = InternalDiscovery(delegate)
     private val bleImplementation: BLECentralManager = BLECentralManager(context, internal)
 

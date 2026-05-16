@@ -16,6 +16,7 @@ public class Discovery {
     private let bleImplementation: BLEClientManager
     
     public init(delegate: DiscoveryDelegate) throws {
+        CertificateStore.ensureRegistered()
         internalHandler = try InternalDiscovery(delegate: delegate)
         bleImplementation = BLEClientManager(delegate: delegate, internalHandler: internalHandler)
         internalHandler.addBleImplementation(implementation: bleImplementation)

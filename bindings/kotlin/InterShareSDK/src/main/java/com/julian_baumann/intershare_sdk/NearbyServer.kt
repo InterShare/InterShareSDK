@@ -15,6 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectionDelegate) {
+    init {
+        CertificateStoreManager.ensureRegistered(context)
+    }
+
     private val bluetoothManager: BluetoothManager by lazy {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }

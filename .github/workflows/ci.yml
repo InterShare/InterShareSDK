@@ -51,7 +51,7 @@ jobs:
         - uses: nttld/setup-ndk@v1
           id: setup-ndk
           with:
-            ndk-version: r26c
+            ndk-version: r27d
             add-to-path: true
             link-to-sdk: true
 
@@ -66,11 +66,12 @@ jobs:
 
         - name: Build library
           env:
-            ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+            ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
             GITHUB_ACTOR: ${{ secrets.GITHUB_ACTOR }}
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             VERSION: ${{ github.event.inputs.version }}
           run: |
+            echo $ANDROID_NDK
             echo $ANDROID_NDK_HOME
             echo $ANDROID_NDK_TOOLCHAIN_DIR
             rustup target add x86_64-linux-android x86_64-unknown-linux-gnu aarch64-linux-android armv7-linux-androideabi i686-linux-android

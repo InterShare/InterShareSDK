@@ -18,6 +18,11 @@ dictionary TcpConnectionInfo {
     u32 port;
 };
 
+dictionary TlsIdentity {
+    sequence<u8> certificate_der;
+    sequence<u8> private_key_der;
+};
+
 enum ConnectionIntentType {
     "FileTransfer",
     "Clipboard"
@@ -70,6 +75,7 @@ interface SendProgressState {
     Unknown();
     Connecting();
     Requesting();
+    VerificationCode(string code);
     ConnectionMediumUpdate(ConnectionMedium medium);
     Transferring(double progress);
     Cancelled();
@@ -79,4 +85,13 @@ interface SendProgressState {
 
 callback interface SendProgressDelegate {
     void progress_changed(SendProgressState progress);
+};
+
+callback interface CertificateStoreDelegate {
+    TlsIdentity? load_identity();
+    void store_identity(TlsIdentity identity);
+    void clear_identity();
+    sequence<u8>? load_remote_certificate(string device_id);
+    void store_remote_certificate(string device_id, sequence<u8> certificate_der);
+    void clear_remote_certificate(string device_id);
 };

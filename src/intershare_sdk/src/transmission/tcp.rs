@@ -1,5 +1,5 @@
-use crate::communication::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
+use crate::encryption::initiate_receiver_communication;
 use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
 use crate::stream::Close;
 use log::info;

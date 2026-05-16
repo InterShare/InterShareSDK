@@ -1,4 +1,4 @@
-﻿namespace InterShareSdk;
+namespace InterShareSdk;
 
 public class NearbyServer(Device myDevice, NearbyConnectionDelegate? @delegate)
     : InternalNearbyServer(myDevice, _downloadsPath, @delegate)
@@ -10,4 +10,7 @@ public class NearbyServer(Device myDevice, NearbyConnectionDelegate? @delegate)
 }
 
 public interface IDiscoveryDelegate : DeviceListUpdateDelegate;
-public class Discovery(IDiscoveryDelegate? @delegate) : InternalDiscovery(@delegate);
+
+public class Discovery(IDiscoveryDelegate? @delegate) : InternalDiscovery(@delegate)
+{
+}
