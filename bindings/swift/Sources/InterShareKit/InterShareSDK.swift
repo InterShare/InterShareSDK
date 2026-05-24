@@ -415,6 +415,22 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -776,11 +792,37 @@ public protocol InternalDiscoveryProtocol : AnyObject {
     
     func addDiscoveredDevice(device: Device) 
     
+    /**
+     * Removes peers that have not been seen in the advertisement stream within
+     * `ttl_seconds`, firing `device_removed` for any that were resolved. The
+     * native layer should call this periodically (e.g. every couple seconds).
+     */
+    func expireDevices(ttlSeconds: UInt64) 
+    
     func getDevices()  -> [Device]
     
-    func parseDiscoveryMessage(data: Data, bleUuid: String?) 
+    /**
+     * Called by the native layer after it has connected to a peer and read the
+     * discovery characteristic.
+     *
+     * - `ble_uuid` is the platform peripheral identifier, stored as the BLE
+     * connection target (used later to open the L2CAP channel).
+     * - `token` is the advertised correlation token, used as the liveness key
+     * so the peer can be tracked across BLE MAC-address rotation.
+     */
+    func parseDiscoveryMessage(data: Data, bleUuid: String?, token: String?) 
     
     func removeDiscoveredDevice(deviceId: String) 
+    
+    /**
+     * Called by the native layer for every advertisement packet observed.
+     * Updates the peer's last-seen time (the liveness heartbeat) and returns
+     * whether the native layer should perform a GATT connect+read.
+     *
+     * Returns `false` for peers we have already resolved or attempted very
+     * recently, which is what eliminates the connect-on-every-packet flood.
+     */
+    func shouldConnect(token: String?, deviceIdentifier: String)  -> Bool
     
     func start() 
     
@@ -860,6 +902,18 @@ open func addDiscoveredDevice(device: Device) {try! rustCall() {
 }
 }
     
+    /**
+     * Removes peers that have not been seen in the advertisement stream within
+     * `ttl_seconds`, firing `device_removed` for any that were resolved. The
+     * native layer should call this periodically (e.g. every couple seconds).
+     */
+open func expireDevices(ttlSeconds: UInt64) {try! rustCall() {
+    uniffi_intershare_sdk_fn_method_internaldiscovery_expire_devices(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(ttlSeconds),$0
+    )
+}
+}
+    
 open func getDevices() -> [Device] {
     return try!  FfiConverterSequenceTypeDevice.lift(try! rustCall() {
     uniffi_intershare_sdk_fn_method_internaldiscovery_get_devices(self.uniffiClonePointer(),$0
@@ -867,10 +921,20 @@ open func getDevices() -> [Device] {
 })
 }
     
-open func parseDiscoveryMessage(data: Data, bleUuid: String?) {try! rustCall() {
+    /**
+     * Called by the native layer after it has connected to a peer and read the
+     * discovery characteristic.
+     *
+     * - `ble_uuid` is the platform peripheral identifier, stored as the BLE
+     * connection target (used later to open the L2CAP channel).
+     * - `token` is the advertised correlation token, used as the liveness key
+     * so the peer can be tracked across BLE MAC-address rotation.
+     */
+open func parseDiscoveryMessage(data: Data, bleUuid: String?, token: String?) {try! rustCall() {
     uniffi_intershare_sdk_fn_method_internaldiscovery_parse_discovery_message(self.uniffiClonePointer(),
         FfiConverterData.lower(data),
-        FfiConverterOptionString.lower(bleUuid),$0
+        FfiConverterOptionString.lower(bleUuid),
+        FfiConverterOptionString.lower(token),$0
     )
 }
 }
@@ -880,6 +944,23 @@ open func removeDiscoveredDevice(deviceId: String) {try! rustCall() {
         FfiConverterString.lower(deviceId),$0
     )
 }
+}
+    
+    /**
+     * Called by the native layer for every advertisement packet observed.
+     * Updates the peer's last-seen time (the liveness heartbeat) and returns
+     * whether the native layer should perform a GATT connect+read.
+     *
+     * Returns `false` for peers we have already resolved or attempted very
+     * recently, which is what eliminates the connect-on-every-packet flood.
+     */
+open func shouldConnect(token: String?, deviceIdentifier: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_intershare_sdk_fn_method_internaldiscovery_should_connect(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(token),
+        FfiConverterString.lower(deviceIdentifier),$0
+    )
+})
 }
     
 open func start() {try! rustCall() {
@@ -960,6 +1041,13 @@ public protocol InternalNearbyServerProtocol : AnyObject {
     func changeDevice(newDevice: Device) 
     
     func getAdvertisementData() async  -> Data
+    
+    /**
+     * The compact correlation token this device advertises so scanners can
+     * identify it across BLE MAC-address rotations without reconnecting.
+     * See [`crate::compact_device_token`].
+     */
+    func getBleAdvertisementName()  -> String?
     
     func getCurrentIp()  -> String?
     
@@ -1085,6 +1173,18 @@ open func getAdvertisementData()async  -> Data {
             errorHandler: nil
             
         )
+}
+    
+    /**
+     * The compact correlation token this device advertises so scanners can
+     * identify it across BLE MAC-address rotations without reconnecting.
+     * See [`crate::compact_device_token`].
+     */
+open func getBleAdvertisementName() -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_intershare_sdk_fn_method_internalnearbyserver_get_ble_advertisement_name(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func getCurrentIp() -> String? {
@@ -4238,9 +4338,22 @@ public func getBleDiscoveryCharacteristicUuid() -> String {
     )
 })
 }
+public func getBleManufacturerId() -> UInt16 {
+    return try!  FfiConverterUInt16.lift(try! rustCall() {
+    uniffi_intershare_sdk_fn_func_get_ble_manufacturer_id($0
+    )
+})
+}
 public func getBleServiceUuid() -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_intershare_sdk_fn_func_get_ble_service_uuid($0
+    )
+})
+}
+public func getCompactDeviceToken(deviceId: String) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_intershare_sdk_fn_func_get_compact_device_token(
+        FfiConverterString.lower(deviceId),$0
     )
 })
 }
@@ -4300,7 +4413,13 @@ private var initializationResult: InitializationResult = {
     if (uniffi_intershare_sdk_checksum_func_get_ble_discovery_characteristic_uuid() != 41174) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_intershare_sdk_checksum_func_get_ble_manufacturer_id() != 1176) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_intershare_sdk_checksum_func_get_ble_service_uuid() != 559) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_intershare_sdk_checksum_func_get_compact_device_token() != 56093) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_func_get_log_file_path_str() != 8890) {
@@ -4363,13 +4482,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_intershare_sdk_checksum_method_internaldiscovery_add_discovered_device() != 37791) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_intershare_sdk_checksum_method_internaldiscovery_expire_devices() != 29164) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_intershare_sdk_checksum_method_internaldiscovery_get_devices() != 48460) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_intershare_sdk_checksum_method_internaldiscovery_parse_discovery_message() != 14241) {
+    if (uniffi_intershare_sdk_checksum_method_internaldiscovery_parse_discovery_message() != 47836) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_internaldiscovery_remove_discovered_device() != 12235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_intershare_sdk_checksum_method_internaldiscovery_should_connect() != 13236) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_internaldiscovery_start() != 23215) {
@@ -4388,6 +4513,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_advertisement_data() != 38682) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_ble_advertisement_name() != 59851) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_current_ip() != 14506) {

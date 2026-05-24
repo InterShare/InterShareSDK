@@ -79,6 +79,12 @@ pub struct InternalNearbyServer {
     #[cfg(target_os = "windows")]
     pub(crate) gatt_service_provider: std::sync::RwLock<Option<GattServiceProvider>>,
 
+    // Shared, always-current advertisement payload read by the Windows GATT
+    // read handler. Kept in sync with `device_connection_info` so the value
+    // served never goes stale (e.g. after `change_device`).
+    #[cfg(target_os = "windows")]
+    pub(crate) advertised_payload: Arc<std::sync::RwLock<Vec<u8>>>,
+
     requested_download_id: Arc<RwLock<Option<String>>>,
 }
 
@@ -120,6 +126,9 @@ impl InternalNearbyServer {
 
             #[cfg(target_os = "windows")]
             gatt_service_provider: std::sync::RwLock::new(None),
+
+            #[cfg(target_os = "windows")]
+            advertised_payload: Arc::new(std::sync::RwLock::new(Vec::new())),
 
             requested_download_id: Arc::new(RwLock::new(None)),
         };
@@ -166,17 +175,26 @@ impl InternalNearbyServer {
         let mut device = new_device.clone();
         device.protocol_version = Some(PROTOCOL_VERSION);
         self.device_connection_info.blocking_write().device = Some(device);
+
+        #[cfg(target_os = "windows")]
+        self.windows_refresh_advertised_payload();
     }
 
     pub fn set_bluetooth_le_details(&self, ble_info: BluetoothLeConnectionInfo) {
-        self.device_connection_info.blocking_write().ble = Some(ble_info)
+        self.device_connection_info.blocking_write().ble = Some(ble_info);
+
+        #[cfg(target_os = "windows")]
+        self.windows_refresh_advertised_payload();
     }
 
     pub fn set_tcp_details(&self, tcp_info: TcpConnectionInfo) {
         let host = tcp_info.hostname.clone();
         let hosts = vec![host];
         certificates::update_hosts(&hosts);
-        self.device_connection_info.blocking_write().tcp = Some(tcp_info)
+        self.device_connection_info.blocking_write().tcp = Some(tcp_info);
+
+        #[cfg(target_os = "windows")]
+        self.windows_refresh_advertised_payload();
     }
 
     pub fn get_current_ip(&self) -> Option<String> {
@@ -421,6 +439,30 @@ impl InternalNearbyServer {
     pub fn get_device_name(&self) -> Option<String> {
         let device = self.device_connection_info.blocking_read().device.clone();
         return Some(device?.name);
+    }
+
+    /// The string this device advertises (as the BLE local name / manufacturer
+    /// data) so scanners can track it. It is the concatenation of:
+    ///   - a stable device token (so the peer is correlated across BLE MAC
+    ///     rotation without reconnecting), and
+    ///   - a data-version suffix that changes whenever the advertised connection
+    ///     info changes (so already-resolved scanners know to re-read).
+    ///
+    /// This is recomputed every time advertising (re)starts, so a network switch
+    /// (which triggers `restart_server`) re-advertises with a fresh version.
+    pub fn get_ble_advertisement_name(&self) -> Option<String> {
+        let info = self.device_connection_info.blocking_read().clone();
+        let device_id = info.device.as_ref()?.id.clone();
+
+        let device_token = crate::compact_device_token(&device_id);
+
+        let payload = DeviceDiscoveryMessage {
+            content: Some(Content::DeviceConnectionInfo(info)),
+        }
+        .encode_length_delimited_to_vec();
+        let data_version = crate::compact_data_version(&payload);
+
+        return Some(format!("{device_token}{data_version}"));
     }
 }
 
