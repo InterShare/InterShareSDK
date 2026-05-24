@@ -63,6 +63,19 @@ pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_DISCOVERY_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
 pub const BLE_BUFFER_SIZE: usize = 10240;
 
+/// Company identifier used for the manufacturer-specific data that carries the
+/// discovery correlation token in BLE advertisements. 0xFFFF is the reserved
+/// "no company / testing" id, which is appropriate for a closed ecosystem.
+pub const BLE_MANUFACTURER_ID: u16 = 0xFFFF;
+
+/// How long (in seconds) a peer may go unseen in the advertisement stream before
+/// it is considered gone and removed from the discovered-devices list.
+pub const BLE_DEVICE_TTL_SECONDS: u64 = 10;
+
+/// Length (in chars) of the stable device-token prefix inside the advertised
+/// correlation string. The remainder of the string is the data-version suffix.
+pub const BLE_DEVICE_TOKEN_LEN: usize = 8;
+
 #[cfg(not(target_os = "android"))]
 static INIT_LOGGER: Once = Once::new();
 
@@ -74,6 +87,39 @@ pub fn get_ble_service_uuid() -> String {
 #[uniffi::export]
 pub fn get_ble_discovery_characteristic_uuid() -> String {
     return BLE_DISCOVERY_CHARACTERISTIC_UUID.to_string();
+}
+
+#[uniffi::export]
+pub fn get_ble_manufacturer_id() -> u16 {
+    return BLE_MANUFACTURER_ID;
+}
+
+/// Derives the stable correlation token from a device id (always
+/// [`BLE_DEVICE_TOKEN_LEN`] chars). This part of the advertised string never
+/// changes for a given device, so scanners use it to correlate the same device
+/// across BLE MAC-address rotation without reconnecting.
+pub fn compact_device_token(device_id: &str) -> String {
+    use base64::Engine;
+
+    let digest = ring::digest::digest(&ring::digest::SHA256, device_id.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest.as_ref()[0..6])
+}
+
+/// Derives a short "data version" from the bytes a scanner would read over GATT.
+/// It changes whenever the advertised connection info changes (e.g. the device
+/// switched networks and now has a different IP/port, or restarted with a new
+/// L2CAP PSM). Appending it to the advertised token lets scanners that have
+/// already resolved a device notice the change and re-read it.
+pub fn compact_data_version(payload: &[u8]) -> String {
+    use base64::Engine;
+
+    let digest = ring::digest::digest(&ring::digest::SHA256, payload);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest.as_ref()[0..3])
+}
+
+#[uniffi::export]
+pub fn get_compact_device_token(device_id: String) -> String {
+    return compact_device_token(&device_id);
 }
 
 #[derive(uniffi::Enum)]
