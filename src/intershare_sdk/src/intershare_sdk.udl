@@ -1,6 +1,7 @@
 namespace InterShareSDK {
 };
 
+[Remote]
 dictionary Device {
     string id;
     string name;
@@ -8,11 +9,13 @@ dictionary Device {
     u32? protocol_version = null;
 };
 
+[Remote]
 dictionary BluetoothLeConnectionInfo {
     string uuid;
     u32 psm;
 };
 
+[Remote]
 dictionary TcpConnectionInfo {
     string hostname;
     u32 port;
@@ -28,12 +31,14 @@ enum ConnectionIntentType {
     "Clipboard"
 };
 
+[Remote]
 dictionary FileTransferIntent {
     string? file_name;
     u64 file_size;
     u64 file_count;
 };
 
+[Remote]
 dictionary ClipboardTransferIntent {
     string clipboard_content;
 };

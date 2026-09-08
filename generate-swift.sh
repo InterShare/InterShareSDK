@@ -25,13 +25,7 @@ function buildStaticLibrary()
 {
     target=$1
     printInfo "Building for $target"
-    # cargo build --manifest-path $FFI_PROJECT --lib --release --target $target
-    RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none" cargo +nightly build \
-        --manifest-path $FFI_PROJECT \
-        --lib \
-        -Z build-std=std,panic_abort \
-        -Z build-std-features="optimize_for_size" \
-        --target $target --release
+    cargo build --manifest-path $FFI_PROJECT --lib --release --target $target
 
     printDone
 }
@@ -40,8 +34,7 @@ function generateUniffiBindings()
 {
     printInfo "Generating bindings"
     cargo build --release
-    cargo run --bin uniffi-bindgen generate --library target/release/libintershare_sdk.a --language swift --out-dir "bindings/swift/Sources/InterShareKit"
-    # cargo run --bin uniffi-bindgen generate "src/intershare_sdk_ffi/src/intershare_sdk.udl" --language swift --out-dir "bindings/swift/Sources/InterShareSDK"
+    cargo run --bin uniffi-bindgen generate target/release/libintershare_sdk.a --language swift --out-dir "bindings/swift/Sources/InterShareKit"
 
     pushd bindings/swift
         mv Sources/InterShareKit/*.h .out/headers/
@@ -113,7 +106,9 @@ mkdir bindings/swift/.out/macos
 mkdir bindings/swift/.out/ios
 mkdir bindings/swift/.out/ios-simulator
 
-export MACOSX_DEPLOYMENT_TARGET=12.0
+# Do NOT export MACOSX_DEPLOYMENT_TARGET here: it also applies to host proc-macro
+# dylibs, which newer macOS dyld then refuses to load ("mis-aligned LINKEDIT
+# string pool"). rustc's default (11.0) is already below the package minimum.
 
 # iOS
 buildStaticLibrary aarch64-apple-ios

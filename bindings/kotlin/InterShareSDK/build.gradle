@@ -36,7 +36,7 @@ android {
         def t = tasks.register("generate${variant.name.capitalize()}UniFFIBindings", Exec) {
             workingDir "${project.projectDir}"
             // Runs the bindings generation, note that you must have uniffi-bindgen installed and in your PATH environment variable
-            commandLine "${System.properties['user.home']}/.cargo/bin/cargo", 'run', '--bin', 'uniffi-bindgen', 'generate', '--library', '../../../target/aarch64-linux-android/release/libintershare_sdk.so', '--config', '../../../src/intershare_sdk/uniffi.toml', '--language', 'kotlin', '--out-dir', "${buildDir}/generated/source/uniffi/${variant.name}/java"
+            commandLine "${System.properties['user.home']}/.cargo/bin/cargo", 'run', '--bin', 'uniffi-bindgen', 'generate', '../../../target/aarch64-linux-android/release/libintershare_sdk.so', '--config', '../../../src/intershare_sdk/uniffi.toml', '--language', 'kotlin', '--out-dir', "${buildDir}/generated/source/uniffi/${variant.name}/java"
         }
 
         variant.javaCompileProvider.get().dependsOn(t)

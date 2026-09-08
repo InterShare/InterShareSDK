@@ -31,7 +31,7 @@ walkdir = { version = "2.5", default-features = false }
 url = { version = "2.5.4", default-features = false }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fast_qr = { version = "0.13.1", default-features = false, features = ["image"]}
-uniffi = { version = "0.28", features = ["cli", "tokio", "default"] }
+uniffi = { version = "0.31", features = ["cli", "tokio"] }
 regex = "1"
 rustls = { version = "0.23.32", features = ["log", "logging", "ring", "std"], default-features = false }
 rustls-pki-types = "1.12.0"
@@ -48,4 +48,4 @@ futures = "0.3.31"
 dirs = "5.0.1"
 
 [build-dependencies]
-uniffi = { version = "0.28",  features = ["build"] }
+uniffi = { version = "0.31", features = ["build"] }
