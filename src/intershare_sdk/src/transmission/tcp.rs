@@ -158,12 +158,29 @@ pub struct TcpClient {}
 
 impl TcpClient {
     pub fn connect(address: SocketAddr) -> Result<TcpStream, io::Error> {
-        let std_stream = std::net::TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
-        std_stream
-            .set_nonblocking(false)
-            .expect("Failed to set non blocking");
+        // Retry on EINTR (os error 4): a signal interrupting the blocking connect
+        // is transient and shouldn't abandon the (preferred) Wi-Fi path and fall
+        // back to BLE.
+        const MAX_ATTEMPTS: usize = 3;
+        let mut last_error: Option<io::Error> = None;
 
-        return Ok(std_stream);
+        for _ in 0..MAX_ATTEMPTS {
+            match std::net::TcpStream::connect_timeout(&address, Duration::from_secs(2)) {
+                Ok(std_stream) => {
+                    std_stream
+                        .set_nonblocking(false)
+                        .expect("Failed to set non blocking");
+                    return Ok(std_stream);
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                    last_error = Some(error);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "connect failed")))
     }
 }
 

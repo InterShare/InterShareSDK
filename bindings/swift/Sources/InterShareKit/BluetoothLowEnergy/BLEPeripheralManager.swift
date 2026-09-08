@@ -25,6 +25,11 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
     // Desired advertising state. Lets us (re)start advertising automatically once
     // Bluetooth is powered on, including after an off -> on bounce.
     private var shouldAdvertise = false
+    // Whether we have already published the L2CAP channel + service and started
+    // advertising. Prevents repeated startServer() calls from publishing a new
+    // L2CAP channel each time (which churns the PSM) and re-issuing advertising
+    // (which fails with "Advertising has already started").
+    private var isServing = false
     public var state: BluetoothState
 
     init(handler: InternalNearbyServer, delegate: NearbyServerDelegate) {
@@ -46,12 +51,27 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
             // CoreBluetooth tears down services and advertising when Bluetooth is
             // powered off. If we were meant to be advertising, re-establish it.
             if shouldAdvertise {
-                advertisingRetryCount = 0
-                startL2CapServer()
+                beginServing()
             }
         } else {
             print("InterShareSDK [BLE Peripheral]: Bluetooth state changed to: \(state)")
+            // CoreBluetooth drops the published channel/service and advertising
+            // when not powered on; reflect that so we re-publish on the next
+            // powered-on transition.
+            isServing = false
         }
+    }
+
+    /// Publishes the L2CAP channel + service and starts advertising, but only
+    /// once. Repeated calls while already serving are ignored.
+    private func beginServing() {
+        if isServing {
+            print("InterShareSDK [BLE Peripheral]: Already serving, ignoring start request")
+            return
+        }
+        isServing = true
+        advertisingRetryCount = 0
+        startL2CapServer()
     }
     
     public func ensureValidState() throws {
@@ -171,6 +191,14 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
+            // "Advertising is already active" is not a real failure — advertising
+            // is running, so don't retry (which would just fail again).
+            if error.localizedDescription.localizedCaseInsensitiveContains("already") {
+                print("InterShareSDK [BLE Peripheral]: Advertising already active, treating as started")
+                advertisingRetryCount = 0
+                return
+            }
+
             print("InterShareSDK [BLE Peripheral]: Advertising failed: \(error.localizedDescription)")
             retryAdvertising()
         } else {
@@ -188,12 +216,13 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
             return
         }
 
-        startL2CapServer()
+        beginServing()
     }
 
     func stopServer() {
         print("InterShareSDK [BLE Peripheral]: Stopping server")
         shouldAdvertise = false
+        isServing = false
         peripheralManager.stopAdvertising()
         peripheralManager.removeAllServices()
     }

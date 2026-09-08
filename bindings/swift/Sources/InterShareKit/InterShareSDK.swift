@@ -1043,9 +1043,15 @@ public protocol InternalNearbyServerProtocol : AnyObject {
     func getAdvertisementData() async  -> Data
     
     /**
-     * The compact correlation token this device advertises so scanners can
-     * identify it across BLE MAC-address rotations without reconnecting.
-     * See [`crate::compact_device_token`].
+     * The string this device advertises (as the BLE local name / manufacturer
+     * data) so scanners can track it. It is the concatenation of:
+     * - a stable device token (so the peer is correlated across BLE MAC
+     * rotation without reconnecting), and
+     * - a data-version suffix that changes whenever the advertised connection
+     * info changes (so already-resolved scanners know to re-read).
+     *
+     * This is recomputed every time advertising (re)starts, so a network switch
+     * (which triggers `restart_server`) re-advertises with a fresh version.
      */
     func getBleAdvertisementName()  -> String?
     
@@ -1176,9 +1182,15 @@ open func getAdvertisementData()async  -> Data {
 }
     
     /**
-     * The compact correlation token this device advertises so scanners can
-     * identify it across BLE MAC-address rotations without reconnecting.
-     * See [`crate::compact_device_token`].
+     * The string this device advertises (as the BLE local name / manufacturer
+     * data) so scanners can track it. It is the concatenation of:
+     * - a stable device token (so the peer is correlated across BLE MAC
+     * rotation without reconnecting), and
+     * - a data-version suffix that changes whenever the advertised connection
+     * info changes (so already-resolved scanners know to re-read).
+     *
+     * This is recomputed every time advertising (re)starts, so a network switch
+     * (which triggers `restart_server`) re-advertises with a fresh version.
      */
 open func getBleAdvertisementName() -> String? {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
@@ -4515,7 +4527,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_advertisement_data() != 38682) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_ble_advertisement_name() != 59851) {
+    if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_ble_advertisement_name() != 35404) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_current_ip() != 14506) {

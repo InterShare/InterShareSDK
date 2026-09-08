@@ -15,12 +15,17 @@ use std::{
     io::{Read, Write},
     net::ToSocketAddrs,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
 use tokio::sync::{
     oneshot::{self, Sender},
     RwLock,
 };
 use uuid::Uuid;
+
+/// How long to wait for the native layer to open the BLE L2CAP channel before
+/// giving up, so a failed open never hangs the send indefinitely.
+const L2CAP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 static L2CAP_CONNECTIONS: OnceLock<RwLock<HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>>> =
     OnceLock::new();
@@ -172,17 +177,48 @@ impl Connection {
         if let Some(ble_l2cap_client) = &*self.ble_l2_cap_client.read().await {
             info!("Requesting L2CAP connection...");
             ble_l2cap_client.open_l2cap_connection(
-                bluetooth_l2cap_id,
+                bluetooth_l2cap_id.clone(),
                 ble_connection_details.uuid.clone(),
                 ble_connection_details.psm,
             );
         } else {
+            L2CAP_CONNECTIONS
+                .get()
+                .unwrap()
+                .write()
+                .await
+                .remove(&bluetooth_l2cap_id);
             return Err(ConnectErrors::InternalBleHandlerNotAvailable);
         }
 
-        let connection = receiver
-            .await
-            .map_err(|_| ConnectErrors::FailedToEstablishBleConnection)?;
+        // Bound the wait without depending on a tokio reactor being present:
+        // `send_to` is not necessarily driven by a tokio runtime, so a tokio
+        // timer here would panic ("there is no reactor running"). Instead a
+        // background thread drops the pending sender after the deadline, which
+        // makes `receiver.await` resolve with an error rather than hang forever.
+        let timeout_id = bluetooth_l2cap_id.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(L2CAP_CONNECT_TIMEOUT);
+            if let Some(connections) = L2CAP_CONNECTIONS.get() {
+                connections.blocking_write().remove(&timeout_id);
+            }
+        });
+
+        let connection = match receiver.await {
+            Ok(connection) => connection,
+            Err(_) => {
+                // Sender dropped: either the timeout fired or the native layer
+                // failed to open the channel.
+                error!("L2CAP channel did not open (timed out or failed)");
+                L2CAP_CONNECTIONS
+                    .get()
+                    .unwrap()
+                    .write()
+                    .await
+                    .remove(&bluetooth_l2cap_id);
+                return Err(ConnectErrors::FailedToEstablishBleConnection);
+            }
+        };
 
         info!("Opened a L2CAP connection");
 
