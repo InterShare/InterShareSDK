@@ -30,7 +30,7 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     )
 
     private val internalBleImplementation = BLEPeripheralManager(context, internal, bluetoothManager)
-    private val internalL2CapClient = L2CAPClientManager(internal)
+    private val internalL2CapClient = L2CAPClientManager(internal, bluetoothManager)
     private var currentIPAddress: String? = null
     private var connectivityManager: ConnectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private var started = false

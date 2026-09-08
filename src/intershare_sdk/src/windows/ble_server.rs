@@ -31,19 +31,16 @@ impl InternalNearbyServer {
 
         characteristic_parameters.SetReadProtectionLevel(GattProtectionLevel::Plain)?;
 
-        // Provide a static value to avoid empty reads on some platforms
-        // Encode the current DeviceDiscoveryMessage and set it as the static value
-        let device_connection_info = self.device_connection_info.read().await.clone();
-        let initial_value = DeviceDiscoveryMessage {
-            content: Some(Content::DeviceConnectionInfo(
-                device_connection_info.clone(),
-            )),
-        }
-        .encode_length_delimited_to_vec();
-        let writer = DataWriter::new()?;
-        writer.WriteBytes(&initial_value)?;
-        let static_buffer = writer.DetachBuffer()?;
-        characteristic_parameters.SetStaticValue(&static_buffer)?;
+        // Seed the shared advertisement payload from the current device info.
+        // We intentionally do NOT call SetStaticValue: when a static value is
+        // set, Windows answers reads itself and never raises ReadRequested, which
+        // would freeze the advertised data at setup time. The dynamic handler
+        // below serves the always-current payload instead.
+        let initial_value = self.windows_current_advertisement_payload().await;
+        *self
+            .advertised_payload
+            .write()
+            .expect("Failed to lock advertised_payload") = initial_value;
 
         let characteristic_result: GattLocalCharacteristicResult = gatt_service_provider
             .Service()?
@@ -52,6 +49,9 @@ impl InternalNearbyServer {
 
         let gatt_characteristic = characteristic_result.Characteristic()?;
 
+        // The handler reads the always-current payload rather than a one-time
+        // snapshot, so values stay correct after `change_device`.
+        let advertised_payload = self.advertised_payload.clone();
         let read_requested_handler = TypedEventHandler::new(
             move |_sender: &Option<GattLocalCharacteristic>,
                   args: &Option<GattReadRequestedEventArgs>| {
@@ -59,12 +59,10 @@ impl InternalNearbyServer {
                     let deferral = args.GetDeferral()?;
                     let request: GattReadRequest = args.GetRequestAsync()?.get()?;
 
-                    let value = DeviceDiscoveryMessage {
-                        content: Some(Content::DeviceConnectionInfo(
-                            device_connection_info.clone(),
-                        )),
-                    }
-                    .encode_length_delimited_to_vec();
+                    let value = advertised_payload
+                        .read()
+                        .map(|payload| payload.clone())
+                        .unwrap_or_default();
 
                     let writer = DataWriter::new()?;
                     writer.WriteBytes(&value)?;
@@ -79,6 +77,29 @@ impl InternalNearbyServer {
         gatt_characteristic.ReadRequested(&read_requested_handler)?;
 
         return Ok(gatt_service_provider);
+    }
+
+    /// Encodes the current device connection info into a discovery payload.
+    async fn windows_current_advertisement_payload(&self) -> Vec<u8> {
+        let device_connection_info = self.device_connection_info.read().await.clone();
+        DeviceDiscoveryMessage {
+            content: Some(Content::DeviceConnectionInfo(device_connection_info)),
+        }
+        .encode_length_delimited_to_vec()
+    }
+
+    /// Recomputes and stores the shared advertisement payload from the current
+    /// device info (sync entry point used by `change_device`).
+    pub(crate) fn windows_refresh_advertised_payload(&self) {
+        let device_connection_info = self.device_connection_info.blocking_read().clone();
+        let payload = DeviceDiscoveryMessage {
+            content: Some(Content::DeviceConnectionInfo(device_connection_info)),
+        }
+        .encode_length_delimited_to_vec();
+
+        if let Ok(mut stored) = self.advertised_payload.write() {
+            *stored = payload;
+        }
     }
 
     pub(crate) async fn start_windows_server(&self) {

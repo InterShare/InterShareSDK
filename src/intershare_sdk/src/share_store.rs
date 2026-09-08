@@ -138,6 +138,15 @@ impl ShareStore {
             SendProgressState::Transferring { progress: 0.8 },
         );
         let _ = proto_stream.send(&transfer_request);
+
+        // Release the borrow, then flush and close so the underlying transport
+        // (notably the BLE L2CAP channel) is actually torn down. Dropping the
+        // stream alone does NOT call `Close`, which would leave the channel open
+        // and block subsequent requests.
+        drop(proto_stream);
+        let _ = encrypted_stream.flush();
+        encrypted_stream.close();
+
         update_progress(&progress_delegate, SendProgressState::Finished);
 
         return Ok(());
@@ -218,6 +227,8 @@ impl ShareStore {
 
         if !response.accepted {
             update_progress(&progress_delegate, SendProgressState::Declined);
+            let _ = encrypted_stream.flush();
+            encrypted_stream.close();
             return Err(ConnectErrors::Declined);
         }
 
@@ -237,6 +248,11 @@ impl ShareStore {
             error!("Error while tarring: {}", error);
             update_progress(&progress_delegate, SendProgressState::Cancelled);
         }
+
+        // Flush and close so the transport (BLE L2CAP channel in particular) is
+        // torn down; otherwise the channel stays open and blocks later requests.
+        let _ = encrypted_stream.flush();
+        encrypted_stream.close();
 
         update_progress(&progress_delegate, SendProgressState::Finished);
 

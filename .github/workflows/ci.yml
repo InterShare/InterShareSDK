@@ -97,7 +97,5 @@ jobs:
 
         - name: Build library
           run: |
-            rustup toolchain install nightly-aarch64-apple-darwin
-            rustup component add rust-src --toolchain nightly
             rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios x86_64-apple-darwin aarch64-apple-darwin
             ./generate-swift.sh

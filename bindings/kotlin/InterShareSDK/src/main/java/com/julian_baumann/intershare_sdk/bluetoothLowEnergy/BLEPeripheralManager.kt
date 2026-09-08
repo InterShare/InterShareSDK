@@ -31,7 +31,9 @@ internal class BLEPeripheralManager(private val context: Context, private val in
     private var bluetoothGattServer: BluetoothGattServer? = null
     private var bluetoothL2CAPServer: BluetoothServerSocket? = null
     private var l2CAPThread: Thread? = null
+    @Volatile private var l2CAPRunning = false
     private var advertisingRetryCount = 0
+    private val manufacturerId: Int = getBleManufacturerId().toInt()
 
     private fun createService(): BluetoothGattService {
         val service = BluetoothGattService(discoveryServiceUUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
@@ -95,15 +97,17 @@ internal class BLEPeripheralManager(private val context: Context, private val in
             throw BlePermissionNotGrantedException()
         }
 
-        bluetoothL2CAPServer = bluetoothManager.adapter.listenUsingInsecureL2capChannel()
+        val l2capServer = bluetoothManager.adapter.listenUsingInsecureL2capChannel()
+        bluetoothL2CAPServer = l2capServer
+        l2CAPRunning = true
 
         l2CAPThread = Thread {
             try {
-                val psm = bluetoothL2CAPServer!!.psm.toUInt()
+                val psm = l2capServer.psm.toUInt()
                 internalNearbyServer.setBluetoothLeDetails(BluetoothLeConnectionInfo("", psm))
 
-                while (true) {
-                    val connection = bluetoothL2CAPServer!!.accept()
+                while (l2CAPRunning) {
+                    val connection = l2capServer.accept()
                     val stream = L2CAPStream(connection)
 
                     CoroutineScope(Dispatchers.Main).launch {
@@ -112,7 +116,10 @@ internal class BLEPeripheralManager(private val context: Context, private val in
                 }
             }
             catch (e: Exception) {
-                Log.e("InterShareSDK [BLE Manager]", e.toString())
+                // Expected when the server socket is closed on stop.
+                if (l2CAPRunning) {
+                    Log.e("InterShareSDK [BLE Manager]", e.toString())
+                }
             }
         }
 
@@ -128,41 +135,58 @@ internal class BLEPeripheralManager(private val context: Context, private val in
             throw BlePermissionNotGrantedException()
         }
 
+        // Stop the accept loop and release the L2CAP server socket so the thread
+        // exits and we don't leak a socket/thread on the next start.
+        l2CAPRunning = false
+        try {
+            bluetoothL2CAPServer?.close()
+        } catch (e: Exception) {
+            Log.w("InterShareSDK [BLE Manager]", "Error closing L2CAP server: $e")
+        }
+        bluetoothL2CAPServer = null
+        l2CAPThread?.interrupt()
+        l2CAPThread = null
+
         bluetoothGattServer?.close()
+        bluetoothGattServer = null
     }
 
     @SuppressLint("MissingPermission")
     private fun startAdvertising() {
         val bluetoothLeAdvertiser: BluetoothLeAdvertiser? = bluetoothManager.adapter.bluetoothLeAdvertiser
-        bluetoothManager.adapter.setName(internalNearbyServer.getDeviceName())
 
         bluetoothLeAdvertiser?.let {
-            // Optimized advertising settings for maximum discoverability
             val settings = AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 .setConnectable(true)
                 .setTimeout(0) // No timeout for continuous advertising
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH) // Use high power for better range
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
                 .build()
 
-            // Optimized advertisement data for better discovery
+            // Primary advertisement: just the service UUID. The 128-bit UUID
+            // already consumes most of the 31-byte legacy budget, so the
+            // correlation token goes in the scan response instead.
             val data = AdvertiseData.Builder()
-                .setIncludeDeviceName(false) // Don't include in main advertisement for faster processing
-                .setIncludeTxPowerLevel(true) // Include TX power for better ranging
+                .setIncludeDeviceName(false)
                 .addServiceUuid(ParcelUuid(discoveryServiceUUID))
                 .build()
 
-            // Scan response data with device name
-            val scanResult = AdvertiseData.Builder()
+            // Scan response: the compact correlation token as manufacturer data.
+            // This lets scanners track us across BLE MAC rotation without
+            // reconnecting, and avoids mutating the device's global Bluetooth name.
+            val scanResponseBuilder = AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
-                .build()
+
+            internalNearbyServer.getBleAdvertisementName()?.let { token ->
+                scanResponseBuilder.addManufacturerData(manufacturerId, token.toByteArray(Charsets.UTF_8))
+            }
 
             if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
                 throw BlePermissionNotGrantedException()
             }
 
-            it.startAdvertising(settings, data, scanResult, advertiseCallback)
+            it.startAdvertising(settings, data, scanResponseBuilder.build(), advertiseCallback)
         } ?: Log.w("InterShareSDK [BLE Manager]", "Failed to create advertiser")
     }
 
